@@ -21,7 +21,8 @@ const FORMAT_LABEL: Record<EventRow["format"], string> = {
 
 const MODE_LABEL: Record<EventRow["mode"], string> = {
   singles: "Singles",
-  doubles_americano: "Doubles",
+  doubles_americano: "Doubles (rotating)",
+  doubles_partners: "Doubles (fixed partners)",
 };
 
 function StatusBadge({ status }: { status: EventRow["status"] }) {

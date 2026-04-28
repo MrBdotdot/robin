@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -279,7 +279,6 @@ function RoundChipStrip({
           const isFinal = liveRound == null && round === total;
           const isFullyDone =
             summary != null && summary.total > 0 && summary.done === summary.total;
-          const hasInProgress = summary != null && summary.inProgress > 0;
           // Insert a vertical divider between this chip and the previous one
           // when the Berger group changes (i.e., this chip is the first
           // sub-round of a new logical round).
@@ -294,22 +293,22 @@ function RoundChipStrip({
             prevSummary?.bergerGroup != null &&
             summary.bergerGroup === prevSummary.bergerGroup;
 
-          // Tone — keeps WCAG AA contrast for the inner text
-          const tone = isActive
-            ? isLive
-              ? "bg-live text-live-foreground border-live"
-              : isPast || isFullyDone
-              ? "bg-foreground text-background border-foreground"
-              : "bg-primary text-primary-foreground border-primary"
-            : isLive
-            ? hasInProgress || liveRoundIsPlaying
-              ? "bg-live/30 text-foreground border-live"
-              : "bg-live/15 text-foreground border-live/60"
+          // Color = round STATUS (live / past / future / final). The
+          // selection state is communicated by a ring on top, so the
+          // current playing round always reads as "live yellow" whether
+          // you're viewing it or not, and a future round always reads
+          // as light/neutral.
+          const statusTone = isLive
+            ? "bg-live text-live-foreground border-live"
             : isPast || isFullyDone
             ? "bg-muted text-muted-foreground border-border"
             : isFinal
             ? "bg-completed text-completed-foreground border-completed"
-            : "bg-card text-muted-foreground border-border hover:bg-accent/40 hover:text-foreground";
+            : "bg-card text-foreground border-border hover:bg-accent/40";
+          // Selection ring marks "the chip you're currently viewing"
+          const selection = isActive
+            ? "ring-2 ring-primary ring-offset-2 ring-offset-background scale-[1.05]"
+            : "";
 
           // Per-round completion fraction (e.g. "2/4")
           const showFraction =
@@ -323,21 +322,8 @@ function RoundChipStrip({
             : `Round ${round}${isLive ? " (current)" : isPast ? " (past)" : ""}`;
 
           return (
-            <Fragment key={round}>
-              {newBergerGroup && (
-                <span
-                  aria-hidden
-                  className="mx-1 h-5 w-px shrink-0 bg-border"
-                />
-              )}
-              {continuesBergerGroup && (
-                <span
-                  aria-hidden
-                  className="-mx-1 h-px w-3 shrink-0 bg-border/60"
-                  title="Same round, split sub-rounds"
-                />
-              )}
             <button
+              key={round}
               ref={isActive ? activeRef : undefined}
               type="button"
               role="tab"
@@ -345,9 +331,15 @@ function RoundChipStrip({
               aria-label={ariaLabel}
               onClick={() => onChange(round)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                tone,
-                isActive && "scale-[1.05]"
+                "relative inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tabular-nums transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                statusTone,
+                selection,
+                // Wider gap before a chip that starts a new Berger round
+                newBergerGroup && "ml-4",
+                // A dash on the left edge of a chip that continues a Berger
+                // round, ties it visually to its predecessor.
+                continuesBergerGroup &&
+                  "before:absolute before:left-[-12px] before:top-1/2 before:h-0.5 before:w-3 before:-translate-y-1/2 before:rounded before:bg-foreground/40 before:content-['']"
               )}
             >
               <span>{round}</span>
@@ -371,7 +363,6 @@ function RoundChipStrip({
                 />
               )}
             </button>
-            </Fragment>
           );
         })}
       </div>

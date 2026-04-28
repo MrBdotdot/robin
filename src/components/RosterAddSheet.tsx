@@ -182,7 +182,7 @@ export function RosterAddSheet({
     }
   };
 
-  const minPlayers = eventMode === "doubles_americano" ? 4 : 2;
+  const minPlayers = eventMode === "singles" ? 2 : 4;
 
   return (
     <Sheet

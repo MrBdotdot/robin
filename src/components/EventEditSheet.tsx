@@ -384,7 +384,12 @@ function LockedSection({
   const items: { label: string; value: string; locked: boolean; reason?: string }[] = [
     {
       label: "Singles / Doubles",
-      value: event.mode === "singles" ? "Singles" : "Doubles (rotating)",
+      value:
+        event.mode === "singles"
+          ? "Singles"
+          : event.mode === "doubles_partners"
+          ? "Doubles (fixed partners)"
+          : "Doubles (rotating)",
       locked: hasMatches,
       reason: "Changing this would invalidate the existing schedule.",
     },

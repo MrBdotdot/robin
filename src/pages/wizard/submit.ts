@@ -60,7 +60,7 @@ function orderPlayerNames(
   existingMap: Map<string, ExistingPlayer | { id: string; full_name: string }>,
   s: WizardState
 ): string[] {
-  const isDoubles = s.mode === "doubles_americano";
+  const isDoubles = s.mode !== "singles";
   if (s.seedingStrategy === "rating") {
     return [...names].sort((a, b) => {
       const ra = existingMap.get(a) as ExistingPlayer | undefined;
@@ -183,7 +183,7 @@ export async function submitWizard(s: WizardState): Promise<string> {
   }
 
   // 4. Auto-generate schedule and flip to live
-  const minPlayers = s.mode === "doubles_americano" ? 4 : 2;
+  const minPlayers = s.mode === "singles" ? 2 : 4;
   if (playerIds.length >= minPlayers) {
     try {
       const schedule = generateScheduleForMode(s.mode, playerIds, {

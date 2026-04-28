@@ -20,7 +20,8 @@ export function Step5Players({
   setPlayerInput,
   onOpenPicker,
 }: Step5PlayersProps) {
-  const min = s.mode === "doubles_americano" ? 4 : 2;
+  const min = s.mode === "singles" ? 2 : 4;
+  const isFixedPartners = s.mode === "doubles_partners";
   const reorderable = s.seedingStrategy === "order";
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -113,6 +114,15 @@ export function Step5Players({
               <strong className="font-semibold">Tip — drag to seed.</strong>{" "}
               Because you set seeding to "in the order I added them," the order
               below = seeding order. Drag the grip handle to rank players.
+            </div>
+          )}
+          {isFixedPartners && s.playerNames.length > 0 && (
+            <div className="rounded-md border border-dashed border-accent bg-accent/15 p-3 text-xs text-foreground/80">
+              <strong className="font-semibold">Fixed partners.</strong>{" "}
+              Adjacent players in this list become a team — players 1 and 2
+              are partners, 3 and 4 are partners, and so on. Reorder them to
+              control who plays with whom. You'll need an even number of
+              players ({s.playerNames.length} so far).
             </div>
           )}
 

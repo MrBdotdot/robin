@@ -355,6 +355,65 @@ export function generateDoublesAmericano(
 }
 
 /**
+ * Generate a doubles schedule with FIXED partners — players keep the same
+ * partner the entire event. Players are paired sequentially (positions 0+1,
+ * 2+3, ...) so callers can control pairings by ordering players in seed
+ * order before calling.
+ *
+ * Each pair plays every other pair exactly once (Berger over the pair set).
+ *
+ * @param playerIds Ordered list of player IDs. MUST be even count.
+ * @param opts.numCourts Courts available (default 1).
+ */
+export function generateDoublesFixedPartners(
+  playerIds: string[],
+  opts: SchedulerOptions = {}
+): ScheduledMatch[] {
+  if (playerIds.length < 4) {
+    throw new Error("Need at least 4 players (2 pairs) for fixed-partner doubles");
+  }
+  if (playerIds.length % 2 !== 0) {
+    throw new Error(
+      "Fixed-partner doubles needs an even player count — every player must have a partner."
+    );
+  }
+  const numCourts = Math.max(1, opts.numCourts ?? 1);
+
+  // Build the pair list. Partner ids are joined with a separator that's
+  // safe to split later. We feed pair "ids" to the Berger generator, then
+  // expand back into individual player ids when emitting matches.
+  const pairs: string[][] = [];
+  for (let i = 0; i < playerIds.length; i += 2) {
+    pairs.push([playerIds[i], playerIds[i + 1]]);
+  }
+  const pairTokens = pairs.map((_, i) => `__pair_${i}__`);
+  const rounds = bergerPairings(pairTokens);
+
+  let matches: { round: number; sideA: string[]; sideB: string[] }[] = [];
+  for (const { round, pairings } of rounds) {
+    for (const [a, b] of pairings) {
+      const aIdx = pairTokens.indexOf(a);
+      const bIdx = pairTokens.indexOf(b);
+      matches.push({
+        round,
+        sideA: [...pairs[aIdx]],
+        sideB: [...pairs[bIdx]],
+      });
+    }
+  }
+
+  // Refill mode is awkward for fixed pairs (would force pairs to repeat
+  // matchups), so it's intentionally skipped here.
+
+  return assignCourts(
+    matches,
+    numCourts,
+    opts.avoidBackToBack ?? false,
+    opts.avoidRecentMatchups ?? false
+  );
+}
+
+/**
  * Generate just enough matches for every active player to play at least once.
  *
  * For singles with even player count: 1 Berger round (N/2 matches).
@@ -417,13 +476,15 @@ export function generateOneRotation(
  * Convenience entry point — picks the right algorithm based on event mode.
  */
 export function generateScheduleForMode(
-  mode: "singles" | "doubles_americano",
+  mode: "singles" | "doubles_americano" | "doubles_partners",
   playerIds: string[],
   opts: SchedulerOptions = {}
 ): ScheduledMatch[] {
   const all =
     mode === "singles"
       ? generateSinglesSchedule(playerIds, opts)
+      : mode === "doubles_partners"
+      ? generateDoublesFixedPartners(playerIds, opts)
       : generateDoublesAmericano(playerIds, opts);
   // If the user set a min/cap on rounds, truncate. Each player plays at most
   // `minRoundsPerPlayer` rounds in group play before transitioning to
@@ -439,7 +500,7 @@ export function generateScheduleForMode(
  * Helper: how many rounds will a schedule have for the given mode + size?
  * Useful for showing a preview before generating.
  */
-export function estimateRoundCount(_mode: "singles" | "doubles_americano", numPlayers: number): number {
+export function estimateRoundCount(_mode: "singles" | "doubles_americano" | "doubles_partners", numPlayers: number): number {
   if (numPlayers < 2) return 0;
   // Berger always produces N-1 rounds (or N if padded with a bye, but the bye round
   // produces no real matches so we can still report N-1).

@@ -50,7 +50,7 @@ export async function appendOneRotation(
 
   const cfg = event.config as EventConfig & { seeding_strategy?: SeedingStrategy };
   const strategy: SeedingStrategy = cfg.seeding_strategy ?? "order";
-  const isDoubles = event.mode === "doubles_americano";
+  const isDoubles = event.mode !== "singles";
 
   let ratingsByPlayer = new Map<string, number>();
   if (strategy === "rating") {
@@ -330,7 +330,7 @@ export async function regenerateFutureSchedule(
   // Apply seeding strategy from event config (falls back to "order")
   const cfg = event.config as EventConfig & { seeding_strategy?: SeedingStrategy };
   const strategy: SeedingStrategy = cfg.seeding_strategy ?? "order";
-  const isDoubles = event.mode === "doubles_americano";
+  const isDoubles = event.mode !== "singles";
 
   let ratingsByPlayer = new Map<string, number>();
   if (strategy === "rating") {

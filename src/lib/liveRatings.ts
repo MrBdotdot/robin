@@ -87,7 +87,7 @@ export async function recomputeLiveRatings(eventId: string): Promise<void> {
     }
   }
 
-  const isDoubles = event.mode === "doubles_americano";
+  const isDoubles = event.mode !== "singles";
 
   // Step 2: reset to snapshot in a local working map
   const live = new Map<string, Rating>();

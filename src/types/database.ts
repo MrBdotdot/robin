@@ -5,7 +5,7 @@
  */
 
 export type EventStatus = "draft" | "live" | "completed" | "archived";
-export type EventMode = "singles" | "doubles_americano";
+export type EventMode = "singles" | "doubles_americano" | "doubles_partners";
 export type EventFormat = "pure_rr" | "rr_knockout" | "rr_final_bronze";
 
 export type MatchStage = "group_rr" | "knockout" | "bronze" | "final";

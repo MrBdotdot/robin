@@ -7,7 +7,7 @@ import type { ScoringTemplate } from "@/types/database";
 export interface SportPreset {
   id: string;
   label: string;
-  defaultMode: "singles" | "doubles_americano";
+  defaultMode: "singles" | "doubles_americano" | "doubles_partners";
   scoring: ScoringTemplate;
 }
 

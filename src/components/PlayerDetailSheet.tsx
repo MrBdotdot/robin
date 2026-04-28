@@ -68,7 +68,7 @@ export function PlayerDetailSheet({
 
   if (!player || !eventPlayer || !stats) return null;
 
-  const isDoubles = event.mode === "doubles_americano";
+  const isDoubles = event.mode !== "singles";
   const eventCompleted = event.status === "completed" || event.status === "archived";
   const hasMatches = matches.length > 0;
   // If there are no matches yet (draft event), "delete" actually removes the row.

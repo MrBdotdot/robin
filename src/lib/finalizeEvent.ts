@@ -100,7 +100,7 @@ export async function finalizeEvent(eventId: string): Promise<FinalizeResult> {
   const playersById: Record<string, Player> = {};
   for (const p of playersAfter) playersById[p.id] = p;
 
-  const isDoubles = event.mode === "doubles_americano";
+  const isDoubles = event.mode !== "singles";
   const ratingType: RatingType = isDoubles ? "doubles" : "singles";
 
   // 3. Write rating history rows: snapshot → final

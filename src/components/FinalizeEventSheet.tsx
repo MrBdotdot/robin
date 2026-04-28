@@ -126,7 +126,7 @@ export function FinalizeEventSheet({
                 based on completed matches.
               </span>
             </li>
-            {event.mode === "doubles_americano" && (
+            {event.mode !== "singles" && (
               <li className="flex gap-2">
                 <span className="text-foreground">•</span>
                 <span>Updates each pair's <span className="font-medium text-foreground">partnership rating</span>.</span>

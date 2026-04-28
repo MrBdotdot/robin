@@ -79,6 +79,9 @@ export function Step1Basics({ s, set }: StepProps) {
           <option value="doubles_americano">
             Doubles (partners rotate each round)
           </option>
+          <option value="doubles_partners">
+            Doubles (fixed partners — same partner all event)
+          </option>
         </Select>
       </FormField>
     </div>

@@ -179,18 +179,27 @@ export default function EventDetail() {
   // each round's Berger group id so the strip can visually group sub-rounds
   // that came from the same logical Berger round (split because of court
   // count).
+  //
+  // For matches with explicit `group_label` (events generated after the
+  // tracking landed), we use that directly. For older events that don't have
+  // the column populated, we derive a synthetic grouping: two consecutive
+  // rounds whose player sets are disjoint must be sub-rounds of the same
+  // Berger round (in Berger, every player plays at most once per round).
   const roundSummaries = useMemo(() => {
     if (totalRounds === 0) return [];
-    const arr: {
+    type Row = {
       total: number;
       done: number;
       inProgress: number;
       bergerGroup: string | null;
-    }[] = Array.from({ length: totalRounds }, () => ({
+      players: Set<string>;
+    };
+    const arr: Row[] = Array.from({ length: totalRounds }, () => ({
       total: 0,
       done: 0,
       inProgress: 0,
       bergerGroup: null,
+      players: new Set(),
     }));
     for (const m of matches) {
       if (m.stage !== "group_rr") continue;
@@ -200,6 +209,8 @@ export default function EventDetail() {
       if (arr[idx].bergerGroup == null && m.group_label) {
         arr[idx].bergerGroup = m.group_label;
       }
+      for (const id of m.side_a_player_ids) arr[idx].players.add(id);
+      for (const id of m.side_b_player_ids) arr[idx].players.add(id);
       if (
         m.status === "completed" ||
         m.status === "forfeit_a" ||
@@ -212,7 +223,35 @@ export default function EventDetail() {
         arr[idx].inProgress += 1;
       }
     }
-    return arr;
+
+    // Derive a synthetic Berger grouping if the data is missing. Walk the
+    // rounds and start a new group whenever the next round's player set
+    // intersects with the current. Disjoint = same Berger round.
+    const allMissing = arr.every((r) => r.bergerGroup == null);
+    if (allMissing) {
+      let groupId = 0;
+      for (let i = 0; i < arr.length; i++) {
+        if (i === 0) {
+          arr[i].bergerGroup = `b${groupId}`;
+          continue;
+        }
+        const prev = arr[i - 1].players;
+        const cur = arr[i].players;
+        let intersects = false;
+        for (const p of cur) {
+          if (prev.has(p)) {
+            intersects = true;
+            break;
+          }
+        }
+        if (intersects) groupId += 1;
+        arr[i].bergerGroup = `b${groupId}`;
+      }
+    }
+
+    // Strip the players set from the public row shape — it was just used
+    // for the heuristic above.
+    return arr.map(({ players: _players, ...rest }) => rest);
   }, [matches, totalRounds]);
 
   const liveRound = useMemo(() => {
@@ -244,8 +283,15 @@ export default function EventDetail() {
 
   const handleGenerate = async () => {
     if (!event || generating) return;
-    if (eventPlayers.length < (event.mode === "doubles_americano" ? 4 : 2)) {
+    if (eventPlayers.length < (event.mode === "singles" ? 2 : 4)) {
       toast.error("Not enough players to generate a schedule.");
+      return;
+    }
+    if (
+      event.mode === "doubles_partners" &&
+      eventPlayers.length % 2 !== 0
+    ) {
+      toast.error("Fixed-partner doubles needs an even number of players.");
       return;
     }
     setGenerating(true);
@@ -376,7 +422,11 @@ export default function EventDetail() {
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {event.sport} ·{" "}
-            {event.mode === "singles" ? "Singles" : "Doubles (rotating)"}
+            {event.mode === "singles"
+              ? "Singles"
+              : event.mode === "doubles_partners"
+              ? "Doubles (fixed partners)"
+              : "Doubles (rotating)"}
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {event.scheduled_date && (

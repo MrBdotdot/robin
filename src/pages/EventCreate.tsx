@@ -34,7 +34,7 @@ export default function EventCreate() {
     if (step === 1)
       return s.name.trim().length > 0 && s.sportLabel.trim().length > 0;
     if (step === 5) {
-      const min = s.mode === "doubles_americano" ? 4 : 2;
+      const min = s.mode === "singles" ? 2 : 4;
       return s.playerNames.length >= min;
     }
     return true;
