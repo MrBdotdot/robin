@@ -94,6 +94,12 @@
     @apply h-full;
   }
 
+  /* Bump base font size from 16 to 18 px for more comfortable reading
+     across the whole app. All rem/em-derived sizes scale together. */
+  html {
+    font-size: 18px;
+  }
+
   body {
     @apply bg-background text-foreground antialiased font-sans;
     font-weight: 500;          /* heavier-than-default body for the bold system */
@@ -119,6 +125,28 @@
 
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Date input — make the native calendar picker icon align properly,
+     and ensure the field shape matches other inputs across browsers. */
+  input[type="date"] {
+    min-width: 0;
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 0.25rem;
+    margin-right: -0.25rem;
+    transition: opacity 0.15s;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+  input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
   }
 }
 

@@ -20,6 +20,9 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn, formatDate } from "@/lib/utils";
+import { AssignEventsSheet } from "@/components/AssignEventsSheet";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 type TabKey = "standings" | "events";
 
@@ -42,6 +45,7 @@ export default function SeriesDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("standings");
+  const [assigning, setAssigning] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -291,43 +295,60 @@ export default function SeriesDetail() {
       )}
 
       {tab === "events" && (
-        <Card className="overflow-hidden">
-          {events.length === 0 ? (
-            <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-              No events in this series yet. Open an event's edit sheet to assign it here.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {events.map((e) => (
-                <li key={e.id}>
-                  <Link
-                    to={`/events/${e.id}`}
-                    className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-accent/30"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">
-                        {e.name}
+        <>
+          <div className="mb-3 flex items-center justify-end">
+            <Button size="sm" onClick={() => setAssigning(true)}>
+              <Plus className="h-4 w-4" />
+              Manage events
+            </Button>
+          </div>
+          <Card className="overflow-hidden">
+            {events.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                No events in this series yet. Tap "Manage events" above to add some.
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {events.map((e) => (
+                  <li key={e.id}>
+                    <Link
+                      to={`/events/${e.id}`}
+                      className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-accent/30"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {e.name}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {e.sport}
+                          {e.scheduled_date && ` · ${formatDate(e.scheduled_date)}`}
+                        </span>
                       </span>
-                      <span className="block text-xs text-muted-foreground">
-                        {e.sport}
-                        {e.scheduled_date && ` · ${formatDate(e.scheduled_date)}`}
+                      <span className="flex items-center gap-2">
+                        {e.status === "live" && <Badge variant="live">Live</Badge>}
+                        {e.status === "completed" && (
+                          <Badge variant="completed">Done</Badge>
+                        )}
+                        {e.status === "draft" && <Badge variant="draft">Draft</Badge>}
+                        <UsersIcon className="h-4 w-4 text-muted-foreground" />
                       </span>
-                    </span>
-                    <span className="flex items-center gap-2">
-                      {e.status === "live" && <Badge variant="live">Live</Badge>}
-                      {e.status === "completed" && (
-                        <Badge variant="completed">Done</Badge>
-                      )}
-                      {e.status === "draft" && <Badge variant="draft">Draft</Badge>}
-                      <UsersIcon className="h-4 w-4 text-muted-foreground" />
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </>
       )}
+
+      <AssignEventsSheet
+        open={assigning}
+        onClose={() => setAssigning(false)}
+        seriesId={series.id}
+        seriesName={series.name}
+        assignedEventIds={events.map((e) => e.id)}
+        onAssigned={load}
+      />
     </div>
   );
 }

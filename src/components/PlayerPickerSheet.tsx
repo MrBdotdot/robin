@@ -145,7 +145,7 @@ export function PlayerPickerSheet({
 
       {players !== null && players.length === 0 && (
         <p className="rounded-md border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          No players in your database yet. Add a few by typing names below.
+          Your player database is empty. Close this and type names directly in the player list to add new players.
         </p>
       )}
 

@@ -1,9 +1,11 @@
-import { Plus, Trash2, Users } from "lucide-react";
+import { GripVertical, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "./FormField";
 import type { StepProps } from "./types";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface Step5PlayersProps extends StepProps {
   playerInput: string;
@@ -19,6 +21,9 @@ export function Step5Players({
   onOpenPicker,
 }: Step5PlayersProps) {
   const min = s.mode === "doubles_americano" ? 4 : 2;
+  const reorderable = s.seedingStrategy === "order";
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const addPlayer = () => {
     const name = playerInput.trim();
@@ -38,6 +43,14 @@ export function Step5Players({
       "playerNames",
       s.playerNames.filter((x) => x !== n)
     );
+  };
+
+  const reorder = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    const next = [...s.playerNames];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    set("playerNames", next);
   };
 
   return (
@@ -94,24 +107,78 @@ export function Step5Players({
               </button>
             )}
           </div>
-          {s.playerNames.map((n, idx) => (
-            <div
-              key={n}
-              className="flex items-center justify-between rounded-md border bg-background px-3 py-2"
-            >
-              <span className="text-sm">
-                <span className="text-muted-foreground">{idx + 1}.</span> {n}
-              </span>
-              <button
-                type="button"
-                onClick={() => removePlayer(n)}
-                className="rounded p-1 text-muted-foreground hover:text-destructive"
-                aria-label={`Remove ${n}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+
+          {reorderable && s.playerNames.length > 1 && (
+            <div className="rounded-md border border-dashed border-primary/40 bg-primary/5 p-3 text-xs text-foreground/80">
+              <strong className="font-semibold">Tip — drag to seed.</strong>{" "}
+              Because you set seeding to "in the order I added them," the order
+              below = seeding order. Drag the grip handle to rank players.
             </div>
-          ))}
+          )}
+
+          {s.playerNames.map((n, idx) => {
+            const isDragging = draggingIdx === idx;
+            const isHover = hoverIdx === idx && draggingIdx !== idx;
+            return (
+              <div
+                key={n}
+                draggable={reorderable}
+                onDragStart={(e) => {
+                  if (!reorderable) return;
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", String(idx));
+                  setDraggingIdx(idx);
+                }}
+                onDragOver={(e) => {
+                  if (!reorderable || draggingIdx === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setHoverIdx(idx);
+                }}
+                onDragLeave={() => {
+                  if (hoverIdx === idx) setHoverIdx(null);
+                }}
+                onDrop={(e) => {
+                  if (!reorderable || draggingIdx === null) return;
+                  e.preventDefault();
+                  reorder(draggingIdx, idx);
+                  setDraggingIdx(null);
+                  setHoverIdx(null);
+                }}
+                onDragEnd={() => {
+                  setDraggingIdx(null);
+                  setHoverIdx(null);
+                }}
+                className={cn(
+                  "flex items-center justify-between rounded-md border bg-background px-3 py-2 transition-colors",
+                  isDragging && "opacity-40",
+                  isHover && "border-t-2 border-primary"
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-2 text-sm">
+                  {reorderable && (
+                    <span
+                      className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+                      aria-hidden
+                      title="Drag to reorder"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">{idx + 1}.</span>{" "}
+                  <span className="truncate">{n}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removePlayer(n)}
+                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${n}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -34,9 +34,7 @@ import { BracketView } from "@/components/BracketView";
 import { StartKnockoutSheet } from "@/components/StartKnockoutSheet";
 import { PlayerSwapSheet } from "@/components/PlayerSwapSheet";
 import { MatchSubstituteSheet } from "@/components/MatchSubstituteSheet";
-import { CloneEventSheet } from "@/components/CloneEventSheet";
-import { Pencil, UserPlus, Sparkles, Swords, Copy, Download, GripVertical } from "lucide-react";
-import { downloadJson, slugify } from "@/lib/export";
+import { Pencil, UserPlus, Sparkles, Swords, GripVertical } from "lucide-react";
 import { advanceKnockoutWinners } from "@/lib/startKnockout";
 import { recomputeLiveRatings } from "@/lib/liveRatings";
 import type { ScoringTemplate } from "@/types/database";
@@ -66,9 +64,9 @@ export default function EventDetail() {
   const [subbingMatchId, setSubbingMatchId] = useState<string | null>(null);
   const [subbingSide, setSubbingSide] = useState<"a" | "b" | null>(null);
   const [subbingOutgoingId, setSubbingOutgoingId] = useState<string | null>(null);
-  const [cloning, setCloning] = useState(false);
   const [draggingEpId, setDraggingEpId] = useState<string | null>(null);
   const [hoverEpId, setHoverEpId] = useState<string | null>(null);
+  const [hoverEdge, setHoverEdge] = useState<"above" | "below" | null>(null);
   const [addingRounds, setAddingRounds] = useState(false);
 
   const loadAll = async () => {
@@ -293,26 +291,51 @@ export default function EventDetail() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-6 md:py-8">
-      <header className="mb-6 flex items-start gap-3">
-        <Link
-          to="/events"
-          className={buttonVariants({ variant: "ghost", size: "icon" })}
-          aria-label="Back to events"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="truncate text-xl font-semibold tracking-tight">
+      {/* Header — stacks on mobile, two-column on sm+ */}
+      <header className="mb-6">
+        <div className="mb-3 flex items-center gap-2">
+          <Link
+            to="/events"
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
+            aria-label="Back to events"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setEditingEvent(true)}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "ml-auto"
+            )}
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+          {event.status === "live" && (
+            <button
+              type="button"
+              onClick={() => setFinalizing(true)}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+              title="End event and finalize ratings"
+            >
+              <Sparkles className="h-4 w-4" />
+              End event
+            </button>
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h1 className="break-words text-2xl uppercase tracking-tight sm:text-3xl">
               {event.name}
             </h1>
             <EventStatusBadge status={event.status} />
           </div>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             {event.sport} ·{" "}
             {event.mode === "singles" ? "Singles" : "Doubles (rotating)"}
           </p>
-          <p className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {event.scheduled_date && (
               <span className="inline-flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
@@ -325,55 +348,6 @@ export default function EventDetail() {
               {eventPlayers.length === 1 ? "player" : "players"}
             </span>
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {event.status === "live" && (
-            <button
-              type="button"
-              onClick={() => setFinalizing(true)}
-              className={buttonVariants({ variant: "default", size: "sm" })}
-              title="Finalize event and update ratings"
-            >
-              <Sparkles className="h-4 w-4" />
-              <span className="hidden sm:inline">Finalize</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              downloadJson(`${slugify(event.name) || "event"}.json`, {
-                event,
-                eventPlayers,
-                players,
-                matches,
-                exportedAt: new Date().toISOString(),
-              });
-              toast.success("Event exported");
-            }}
-            className={buttonVariants({ variant: "outline", size: "icon" })}
-            aria-label="Export event data"
-            title="Export event data"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCloning(true)}
-            className={buttonVariants({ variant: "outline", size: "icon" })}
-            aria-label="Duplicate event"
-            title="Duplicate event"
-          >
-            <Copy className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditingEvent(true)}
-            className={buttonVariants({ variant: "outline", size: "icon" })}
-            aria-label="Edit event"
-            title="Edit event"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
         </div>
       </header>
 
@@ -629,18 +603,43 @@ export default function EventDetail() {
           );
         }
 
-        const reorder = async (fromIdx: number, toIdx: number) => {
+        // Optimistic reorder: update eventPlayers state immediately so the
+        // list visibly settles in place, then fire DB updates in parallel.
+        // No `loadAll()` afterward — that would reset scroll + re-fetch
+        // unnecessarily.
+        const applyReorder = (fromIdx: number, toIdx: number) => {
           if (fromIdx === toIdx) return;
-          const ids = sorted.map((s) => s.ep.id);
-          const [moved] = ids.splice(fromIdx, 1);
-          ids.splice(toIdx, 0, moved);
-          for (let i = 0; i < ids.length; i++) {
-            await supabase
-              .from("rr_event_players")
-              .update({ seed: i + 1 })
-              .eq("id", ids[i]);
-          }
-          await loadAll();
+          const orderedIds = sorted.map((s) => s.ep.id);
+          const [moved] = orderedIds.splice(fromIdx, 1);
+          // After splice removal, an insertion at toIdx places the item just
+          // before the row that was originally at toIdx. We want "drop above
+          // row N" to land AT N (above), and "drop below row N" to land at
+          // N+1. The caller passes the desired final index directly.
+          const clamped = Math.max(0, Math.min(toIdx, orderedIds.length));
+          orderedIds.splice(clamped, 0, moved);
+
+          // Optimistic local state update — assign new seeds 1..N.
+          setEventPlayers((prev) => {
+            const byId: Record<string, EventPlayer> = {};
+            for (const p of prev) byId[p.id] = p;
+            const result: EventPlayer[] = [];
+            orderedIds.forEach((id, i) => {
+              const ep = byId[id];
+              if (ep) result.push({ ...ep, seed: i + 1 });
+            });
+            return result;
+          });
+
+          // Fire-and-forget bulk DB write (parallel)
+          Promise.all(
+            orderedIds.map((id, i) =>
+              supabase.from("rr_event_players").update({ seed: i + 1 }).eq("id", id)
+            )
+          ).catch((err) => {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            toast.error("Couldn't save reorder", { description: msg });
+            void loadAll();
+          });
         };
 
         return (
@@ -668,8 +667,7 @@ export default function EventDetail() {
                 <ul className="divide-y">
                   {sorted.map(({ ep, name }, idx) => {
                     const isDragging = draggingEpId === ep.id;
-                    const isHover =
-                      hoverEpId === ep.id && draggingEpId !== ep.id;
+                    const hoverState = hoverEpId === ep.id ? hoverEdge : null;
                     return (
                     <li
                       key={ep.id}
@@ -682,31 +680,52 @@ export default function EventDetail() {
                       }}
                       onDragOver={(e) => {
                         if (!reorderable || !draggingEpId) return;
+                        if (draggingEpId === ep.id) return;
                         e.preventDefault();
                         e.dataTransfer.dropEffect = "move";
-                        setHoverEpId(ep.id);
+                        // Use cursor Y vs row midpoint to pick "above" or "below"
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const midY = rect.top + rect.height / 2;
+                        const edge: "above" | "below" = e.clientY < midY ? "above" : "below";
+                        if (hoverEpId !== ep.id || hoverEdge !== edge) {
+                          setHoverEpId(ep.id);
+                          setHoverEdge(edge);
+                        }
                       }}
                       onDragLeave={() => {
-                        if (hoverEpId === ep.id) setHoverEpId(null);
+                        if (hoverEpId === ep.id) {
+                          setHoverEpId(null);
+                          setHoverEdge(null);
+                        }
                       }}
-                      onDrop={async (e) => {
+                      onDrop={(e) => {
                         if (!reorderable || !draggingEpId) return;
                         e.preventDefault();
                         const fromIdx = sorted.findIndex(
                           (s) => s.ep.id === draggingEpId
                         );
-                        if (fromIdx >= 0) await reorder(fromIdx, idx);
+                        if (fromIdx >= 0) {
+                          // Edge "above" → land at idx; "below" → land at idx + 1.
+                          // Then if we removed a row before that target, decrement
+                          // the target by 1 to keep the visual landing position.
+                          let target = hoverEdge === "below" ? idx + 1 : idx;
+                          if (fromIdx < target) target -= 1;
+                          applyReorder(fromIdx, target);
+                        }
                         setDraggingEpId(null);
                         setHoverEpId(null);
+                        setHoverEdge(null);
                       }}
                       onDragEnd={() => {
                         setDraggingEpId(null);
                         setHoverEpId(null);
+                        setHoverEdge(null);
                       }}
                       className={cn(
                         "group flex items-center gap-2 px-3 py-2 transition-colors",
                         isDragging && "opacity-40",
-                        isHover && "border-t-2 border-primary"
+                        hoverState === "above" && "border-t-2 border-primary",
+                        hoverState === "below" && "border-b-2 border-primary"
                       )}
                     >
                       {reorderable && (
@@ -860,13 +879,6 @@ export default function EventDetail() {
         matches={matches}
         playersById={playersById}
         onSwapped={handleRosterOrSettingsChanged}
-      />
-
-      <CloneEventSheet
-        open={cloning}
-        onClose={() => setCloning(false)}
-        event={event}
-        rosterCount={eventPlayers.length}
       />
 
       {(() => {

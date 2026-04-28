@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CalendarDays, Trash2, Trophy, Users } from "lucide-react";
+import { CalendarDays, Copy, Trash2, Trophy, Users } from "lucide-react";
 import type { EventRow } from "@/types/database";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
@@ -10,6 +10,7 @@ interface EventCardProps {
   featured?: boolean;
   playerCount?: number;
   onDelete?: (eventId: string) => void;
+  onDuplicate?: (eventId: string) => void;
 }
 
 const FORMAT_LABEL: Record<EventRow["format"], string> = {
@@ -41,6 +42,7 @@ export function EventCard({
   featured,
   playerCount,
   onDelete,
+  onDuplicate,
 }: EventCardProps) {
   const dateLabel = formatDate(event.scheduled_date) ?? formatDate(event.created_at);
 
@@ -124,26 +126,48 @@ export function EventCard({
               </span>
             )}
           </div>
-          {onDelete && (
-            <button
-              type="button"
-              aria-label="Delete event"
-              title="Delete event"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDelete(event.id);
-              }}
-              className={cn(
-                "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                featured
-                  ? "hover:bg-foreground/10"
-                  : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              )}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <div className="flex items-center gap-1">
+            {onDuplicate && (
+              <button
+                type="button"
+                aria-label="Duplicate event"
+                title="Duplicate event"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDuplicate(event.id);
+                }}
+                className={cn(
+                  "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  featured
+                    ? "hover:bg-foreground/10"
+                    : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                )}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                aria-label="Delete event"
+                title="Delete event"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete(event.id);
+                }}
+                className={cn(
+                  "rounded-md p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  featured
+                    ? "hover:bg-foreground/10"
+                    : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                )}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </Link>

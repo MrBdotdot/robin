@@ -7,6 +7,7 @@ import type { EventRow, EventStatus } from "@/types/database";
 import { buttonVariants } from "@/components/ui/button";
 import { EventCard } from "@/components/EventCard";
 import { DeleteEventSheet } from "@/components/DeleteEventSheet";
+import { CloneEventSheet } from "@/components/CloneEventSheet";
 
 const STATUS_ORDER: EventStatus[] = ["live", "draft", "completed", "archived"];
 
@@ -15,6 +16,7 @@ export default function EventsList() {
   const [playerCounts, setPlayerCounts] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
+  const [duplicateEventId, setDuplicateEventId] = useState<string | null>(null);
 
   const reload = async () => {
     const { data, error } = await supabase
@@ -177,6 +179,7 @@ export default function EventsList() {
                           featured={idx === 0}
                           playerCount={playerCounts[e.id]}
                           onDelete={(id) => setDeleteEventId(id)}
+                          onDuplicate={(id) => setDuplicateEventId(id)}
                         />
                       </div>
                     ))}
@@ -189,6 +192,7 @@ export default function EventsList() {
                         event={e}
                         playerCount={playerCounts[e.id]}
                         onDelete={(id) => setDeleteEventId(id)}
+                        onDuplicate={(id) => setDuplicateEventId(id)}
                       />
                     ))}
                   </div>
@@ -205,6 +209,19 @@ export default function EventsList() {
         event={events?.find((e) => e.id === deleteEventId) ?? null}
         onDeleted={reload}
       />
+
+      {(() => {
+        const dupEvent = events?.find((e) => e.id === duplicateEventId) ?? null;
+        if (!dupEvent) return null;
+        return (
+          <CloneEventSheet
+            open={duplicateEventId !== null}
+            onClose={() => setDuplicateEventId(null)}
+            event={dupEvent}
+            rosterCount={playerCounts[dupEvent.id] ?? 0}
+          />
+        );
+      })()}
     </div>
   );
 }
