@@ -8,9 +8,14 @@ interface MatchCardProps {
   match: MatchRow;
   playersById: Record<string, Player>;
   onClick?: () => void;
+  /** When true, scheduled matches show "Up next" — reserve this for the
+   *  matches in the live round that are about to be played. Future-round
+   *  scheduled matches should pass false (or omit) so they read as plain
+   *  "Scheduled". */
+  isUpNext?: boolean;
 }
 
-export function MatchCard({ match, playersById, onClick }: MatchCardProps) {
+export function MatchCard({ match, playersById, onClick, isUpNext }: MatchCardProps) {
   const sideAName = renderSide(match.side_a_player_ids, playersById);
   const sideBName = renderSide(match.side_b_player_ids, playersById);
   const isCompleted = match.status === "completed";
@@ -39,7 +44,7 @@ export function MatchCard({ match, playersById, onClick }: MatchCardProps) {
         <span className="text-xs font-medium text-muted-foreground">
           Court {match.court ?? "?"}
         </span>
-        <StatusBadge status={match.status} />
+        <StatusBadge status={match.status} isUpNext={isUpNext} />
       </div>
 
       <div className="space-y-1.5">
@@ -103,13 +108,24 @@ function SideRow({
   );
 }
 
-function StatusBadge({ status }: { status: MatchStatus }) {
+function StatusBadge({
+  status,
+  isUpNext,
+}: {
+  status: MatchStatus;
+  isUpNext?: boolean;
+}) {
   switch (status) {
     case "scheduled":
-      return (
+      return isUpNext ? (
         <Badge variant="scheduled" className="gap-1">
           <Clock className="h-3 w-3" />
           Up next
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="gap-1">
+          <Clock className="h-3 w-3" />
+          Scheduled
         </Badge>
       );
     case "in_progress":

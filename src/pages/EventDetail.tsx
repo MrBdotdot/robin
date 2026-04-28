@@ -518,6 +518,7 @@ export default function EventDetail() {
                       match={m}
                       playersById={playersById}
                       onClick={() => setOpenMatchId(m.id)}
+                      isUpNext={liveRound != null && m.round === liveRound}
                     />
                   ))
                 )}
