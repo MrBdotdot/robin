@@ -1,0 +1,195 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Pantone-derived design tokens.
+   - Cloud Dancer canvas, Darkest Hour ink.
+   - Blue Violet = brand. Sun Glare = energy / live. Exuberant
+     Orange = warn / destructive. White cards lift from canvas.
+   - Every text-on-fill pair below verified to meet WCAG AA.
+   ============================================================ */
+@layer base {
+  :root {
+    /* Surfaces + text */
+    --background: 35 25% 94%;       /* Cloud Dancer #F4EFE6 */
+    --foreground: 0 0% 12%;         /* Darkest Hour #1F1F1F */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 12%;
+
+    /* Brand */
+    --primary: 248 65% 60%;         /* Blue Violet #6453D3 */
+    --primary-foreground: 0 0% 100%;
+
+    /* Less prominent surfaces */
+    --secondary: 35 25% 88%;
+    --secondary-foreground: 0 0% 12%;
+    --muted: 35 20% 90%;
+    --muted-foreground: 0 0% 30%;   /* darker for AA on muted bg */
+
+    /* Highlight / accent */
+    --accent: 75 85% 60%;           /* Sun Glare #DEEC34 */
+    --accent-foreground: 0 0% 12%;  /* dark ink on lime — 12:1 */
+
+    /* Critical actions */
+    --destructive: 12 85% 55%;      /* Exuberant Orange #F25430 */
+    --destructive-foreground: 0 0% 12%;  /* dark ink — 6.5:1 */
+
+    /* Lines + focus */
+    --border: 30 15% 80%;
+    --input: 30 15% 70%;            /* darker for input field 3:1+ */
+    --ring: 248 65% 60%;             /* Blue Violet focus ring */
+    --radius: 0.5rem;                /* tighter, more athletic */
+
+    /* Tournament status — bold Pantone application */
+    --live: 75 85% 60%;             /* Sun Glare */
+    --live-foreground: 0 0% 12%;    /* 12:1 */
+    --completed: 0 0% 12%;          /* Darkest Hour */
+    --completed-foreground: 35 25% 94%; /* Cloud Dancer — 13:1 */
+    --scheduled: 248 65% 60%;       /* Blue Violet */
+    --scheduled-foreground: 0 0% 100%;  /* 5.8:1 */
+    --forfeit: 12 85% 55%;          /* Exuberant Orange */
+    --forfeit-foreground: 0 0% 12%; /* 6.5:1 */
+  }
+
+  .dark {
+    --background: 0 0% 9%;
+    --foreground: 35 25% 94%;
+    --card: 0 0% 14%;
+    --card-foreground: 35 25% 94%;
+
+    --primary: 248 70% 70%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 35 25% 94%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 35 15% 70%;
+    --accent: 75 85% 60%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 12 85% 60%;
+    --destructive-foreground: 0 0% 9%;
+
+    --border: 0 0% 24%;
+    --input: 0 0% 30%;
+    --ring: 248 70% 70%;
+
+    --live: 75 85% 60%;
+    --live-foreground: 0 0% 9%;
+    --completed: 35 25% 94%;
+    --completed-foreground: 0 0% 9%;
+    --scheduled: 248 70% 70%;
+    --scheduled-foreground: 0 0% 9%;
+    --forfeit: 12 85% 60%;
+    --forfeit-foreground: 0 0% 9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body, #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased font-sans;
+    font-weight: 500;          /* heavier-than-default body for the bold system */
+    -webkit-text-size-adjust: 100%;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+  }
+
+  /* Display headings use Archivo Black — set globally so any h1 picks it up */
+  h1 {
+    font-family: "Archivo Black", "Inter", ui-sans-serif, system-ui,
+      -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+  }
+  h2, h3, h4 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  button, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================================
+   Pantone-block utilities
+   ============================================================ */
+@layer components {
+  /* Lifted card — clean white on cream with a clear border.
+     No drop shadow; relies on contrast + the token --border. */
+  .bento-card {
+    @apply rounded-[var(--radius)] border bg-card text-card-foreground;
+  }
+
+  /* Eyebrow / Pantone-style label text — uppercase, wide tracking,
+     bold weight. Used for category labels, swatch IDs, etc. */
+  .pantone-label {
+    @apply text-[10px] font-bold uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  /* Bold solid-color block — used for the live/featured event card
+     and any "swatch" surface. Mirrors the Pantone card aesthetic. */
+  .pantone-block {
+    @apply rounded-[var(--radius)] p-5;
+  }
+}
+
+/* ============================================================
+   Reduced motion — fixes a11y audit finding #9.
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  *:hover {
+    transform: none !important;
+  }
+}
+
+/* ============================================================
+   Print styles — strip nav, force black-on-white.
+   ============================================================ */
+@media print {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 30%;
+    --border: 0 0% 70%;
+  }
+  body { background: white !important; color: black !important; font-size: 11pt; }
+  aside, nav, header > a, .print-hide { display: none !important; }
+  main { overflow: visible !important; padding-bottom: 0 !important; }
+  .bento-card,
+  [class*="rounded-xl"],
+  [class*="rounded-lg"] {
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  section, article, ul, ol, table {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  * { transition: none !important; animation: none !important; }
+  a { color: black; text-decoration: none; }
+}

@@ -1,0 +1,971 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Loader2,
+  Play,
+  Users,
+  Wand2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import { cn, formatDate } from "@/lib/utils";
+import { generateScheduleForMode } from "@/lib/scheduler";
+import type {
+  EventConfig,
+  EventPlayer,
+  EventRow,
+  MatchRow,
+  Player,
+} from "@/types/database";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { MatchCard } from "@/components/MatchCard";
+import { RoundNavigator } from "@/components/RoundNavigator";
+import { PlayerDetailSheet } from "@/components/PlayerDetailSheet";
+import { ScoreSheet } from "@/components/ScoreSheet";
+import { EventEditSheet } from "@/components/EventEditSheet";
+import { RosterAddSheet } from "@/components/RosterAddSheet";
+import { FinalizeEventSheet } from "@/components/FinalizeEventSheet";
+import { StandingsTable } from "@/components/StandingsTable";
+import { BracketView } from "@/components/BracketView";
+import { StartKnockoutSheet } from "@/components/StartKnockoutSheet";
+import { PlayerSwapSheet } from "@/components/PlayerSwapSheet";
+import { MatchSubstituteSheet } from "@/components/MatchSubstituteSheet";
+import { CloneEventSheet } from "@/components/CloneEventSheet";
+import { Pencil, UserPlus, Sparkles, Swords, Copy, Download, GripVertical } from "lucide-react";
+import { downloadJson, slugify } from "@/lib/export";
+import { advanceKnockoutWinners } from "@/lib/startKnockout";
+import { recomputeLiveRatings } from "@/lib/liveRatings";
+import type { ScoringTemplate } from "@/types/database";
+import { computeStandings, type Tiebreaker } from "@/lib/standings";
+import { regenerateFutureSchedule, appendOneRotation } from "@/lib/scheduleSync";
+
+type Tab = "schedule" | "standings" | "bracket" | "roster";
+
+export default function EventDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [event, setEvent] = useState<EventRow | null>(null);
+  const [eventPlayers, setEventPlayers] = useState<EventPlayer[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [matches, setMatches] = useState<MatchRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("schedule");
+  const [generating, setGenerating] = useState(false);
+  const [currentRound, setCurrentRound] = useState(1);
+  const [openPlayerEpId, setOpenPlayerEpId] = useState<string | null>(null);
+  const [openMatchId, setOpenMatchId] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [startingKnockout, setStartingKnockout] = useState(false);
+  const [swappingPlayerId, setSwappingPlayerId] = useState<string | null>(null);
+  const [subbingMatchId, setSubbingMatchId] = useState<string | null>(null);
+  const [subbingSide, setSubbingSide] = useState<"a" | "b" | null>(null);
+  const [subbingOutgoingId, setSubbingOutgoingId] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [draggingEpId, setDraggingEpId] = useState<string | null>(null);
+  const [hoverEpId, setHoverEpId] = useState<string | null>(null);
+  const [addingRounds, setAddingRounds] = useState(false);
+
+  const loadAll = async () => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    const [{ data: ev, error: evErr }, { data: ep, error: epErr }] =
+      await Promise.all([
+        supabase.from("rr_events").select("*").eq("id", id).single(),
+        supabase.from("rr_event_players").select("*").eq("event_id", id),
+      ]);
+
+    if (evErr || !ev) {
+      setError(evErr?.message ?? "Event not found");
+      setLoading(false);
+      return;
+    }
+    if (epErr) {
+      setError(epErr.message);
+      setLoading(false);
+      return;
+    }
+
+    setEvent(ev);
+    setEventPlayers(ep ?? []);
+
+    const playerIds = (ep ?? []).map((row) => row.player_id);
+    if (playerIds.length > 0) {
+      const { data: ps, error: psErr } = await supabase
+        .from("rr_players")
+        .select("*")
+        .in("id", playerIds);
+      if (psErr) {
+        setError(psErr.message);
+        setLoading(false);
+        return;
+      }
+      setPlayers(ps ?? []);
+    } else {
+      setPlayers([]);
+    }
+
+    const { data: ms, error: msErr } = await supabase
+      .from("rr_matches")
+      .select("*")
+      .eq("event_id", id)
+      .order("round")
+      .order("court");
+    if (msErr) {
+      setError(msErr.message);
+      setLoading(false);
+      return;
+    }
+    setMatches(ms ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleScoreSaved = async () => {
+    if (event) {
+      try {
+        await advanceKnockoutWinners(event.id);
+      } catch {
+        // non-fatal — just keep the bracket as-is
+      }
+      try {
+        await recomputeLiveRatings(event.id);
+      } catch {
+        // non-fatal — ratings will be recomputed next time something changes
+      }
+    }
+    await loadAll();
+  };
+
+  const handleRosterOrSettingsChanged = async () => {
+    if (!event) {
+      await loadAll();
+      return;
+    }
+    try {
+      const r = await regenerateFutureSchedule(event.id);
+      if (r.created > 0 || r.deleted > 0) {
+        toast.success("Schedule updated", { description: r.message });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Couldn't refresh schedule", { description: msg });
+    } finally {
+      await loadAll();
+    }
+  };
+
+  const playersById = useMemo(() => {
+    const map: Record<string, Player> = {};
+    for (const p of players) map[p.id] = p;
+    return map;
+  }, [players]);
+
+  const totalRounds = useMemo(() => {
+    if (matches.length === 0) return 0;
+    return Math.max(...matches.map((m) => m.round));
+  }, [matches]);
+
+  const liveRound = useMemo(() => {
+    // "Current" = earliest round that still has a match yet to play.
+    // Forfeits, walkovers, and cancellations count as resolved, so they don't
+    // keep a round current.
+    const incomplete = matches
+      .filter(
+        (m) => m.status === "scheduled" || m.status === "in_progress"
+      )
+      .map((m) => m.round);
+    if (incomplete.length === 0) return null;
+    return Math.min(...incomplete);
+  }, [matches]);
+
+  const liveRoundIsPlaying = useMemo(() => {
+    if (liveRound == null) return false;
+    return matches.some(
+      (m) => m.round === liveRound && m.status === "in_progress"
+    );
+  }, [matches, liveRound]);
+
+  // Snap to live round on first load
+  useEffect(() => {
+    if (liveRound != null) setCurrentRound(liveRound);
+    else if (totalRounds > 0) setCurrentRound(1);
+  }, [liveRound, totalRounds]);
+
+  const matchesInCurrentRound = useMemo(
+    () => matches.filter((m) => m.round === currentRound),
+    [matches, currentRound]
+  );
+
+  const handleGenerate = async () => {
+    if (!event || generating) return;
+    if (eventPlayers.length < (event.mode === "doubles_americano" ? 4 : 2)) {
+      toast.error("Not enough players to generate a schedule.");
+      return;
+    }
+    setGenerating(true);
+    try {
+      const playerIds = [...eventPlayers]
+        .sort((a, b) => (a.seed ?? 999) - (b.seed ?? 999))
+        .map((ep) => ep.player_id);
+      const cfg = event.config as EventConfig;
+      const numCourts = cfg.num_courts ?? 1;
+      const avoidBackToBack = cfg.avoid_back_to_back ?? false;
+      const avoidRecentMatchups = cfg.avoid_recent_matchups ?? false;
+      const fillEmptyCourts = cfg.fill_empty_courts ?? false;
+
+      const schedule = generateScheduleForMode(event.mode, playerIds, {
+        numCourts,
+        avoidBackToBack,
+        avoidRecentMatchups,
+        fillEmptyCourts,
+      });
+
+      const rows = schedule.map((m) => ({
+        event_id: event.id,
+        stage: "group_rr" as const,
+        round: m.round,
+        court: m.court,
+        side_a_player_ids: m.sideA,
+        side_b_player_ids: m.sideB,
+        status: "scheduled" as const,
+      }));
+
+      // Insert matches and flip event to live in parallel
+      const [{ error: insErr }, { error: upErr }] = await Promise.all([
+        supabase.from("rr_matches").insert(rows),
+        supabase
+          .from("rr_events")
+          .update({ status: "live", started_at: new Date().toISOString() })
+          .eq("id", event.id),
+      ]);
+
+      if (insErr) throw insErr;
+      if (upErr) throw upErr;
+
+      toast.success("Schedule generated", {
+        description: `${rows.length} matches across ${
+          new Set(rows.map((r) => r.round)).size
+        } rounds.`,
+      });
+      await loadAll();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Couldn't generate schedule", { description: msg });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">Loading…</span>
+      </div>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-4 py-8 md:px-6">
+        <Link
+          to="/events"
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to events
+        </Link>
+        <div className="mt-6 rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
+          <p className="font-medium text-destructive">Couldn't load event</p>
+          <p className="mt-1 text-muted-foreground">{error ?? "Unknown error"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const matchesExist = matches.length > 0;
+
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-6 md:py-8">
+      <header className="mb-6 flex items-start gap-3">
+        <Link
+          to="/events"
+          className={buttonVariants({ variant: "ghost", size: "icon" })}
+          aria-label="Back to events"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h1 className="truncate text-xl font-semibold tracking-tight">
+              {event.name}
+            </h1>
+            <EventStatusBadge status={event.status} />
+          </div>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {event.sport} ·{" "}
+            {event.mode === "singles" ? "Singles" : "Doubles (rotating)"}
+          </p>
+          <p className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+            {event.scheduled_date && (
+              <span className="inline-flex items-center gap-1">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {formatDate(event.scheduled_date)}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1">
+              <Users className="h-3.5 w-3.5" />
+              {eventPlayers.length}{" "}
+              {eventPlayers.length === 1 ? "player" : "players"}
+            </span>
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {event.status === "live" && (
+            <button
+              type="button"
+              onClick={() => setFinalizing(true)}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+              title="Finalize event and update ratings"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Finalize</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              downloadJson(`${slugify(event.name) || "event"}.json`, {
+                event,
+                eventPlayers,
+                players,
+                matches,
+                exportedAt: new Date().toISOString(),
+              });
+              toast.success("Event exported");
+            }}
+            className={buttonVariants({ variant: "outline", size: "icon" })}
+            aria-label="Export event data"
+            title="Export event data"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCloning(true)}
+            className={buttonVariants({ variant: "outline", size: "icon" })}
+            aria-label="Duplicate event"
+            title="Duplicate event"
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditingEvent(true)}
+            className={buttonVariants({ variant: "outline", size: "icon" })}
+            aria-label="Edit event"
+            title="Edit event"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        </div>
+      </header>
+
+      {/* Tabs */}
+      <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
+        <TabButton active={tab === "schedule"} onClick={() => setTab("schedule")}>
+          Schedule
+        </TabButton>
+        <TabButton active={tab === "standings"} onClick={() => setTab("standings")}>
+          Standings
+        </TabButton>
+        {(event.format !== "pure_rr") && (
+          <TabButton active={tab === "bracket"} onClick={() => setTab("bracket")}>
+            Bracket
+          </TabButton>
+        )}
+        <TabButton active={tab === "roster"} onClick={() => setTab("roster")}>
+          Roster
+        </TabButton>
+      </div>
+
+      {/* SCHEDULE TAB */}
+      {tab === "schedule" && (
+        <>
+          {!matchesExist ? (
+            <Card className="flex flex-col items-center px-6 py-12 text-center">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Wand2 className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-semibold">No schedule yet</h2>
+              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                Generate the round-robin schedule based on the players you've added.
+              </p>
+              <Button
+                size="lg"
+                className="mt-6"
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" />
+                    Generate schedule
+                  </>
+                )}
+              </Button>
+              <p className="mt-3 text-xs text-muted-foreground">
+                {eventPlayers.length}{" "}
+                {eventPlayers.length === 1 ? "player" : "players"} ready
+              </p>
+            </Card>
+          ) : (
+            <>
+              <RoundNavigator
+                current={currentRound}
+                total={totalRounds}
+                liveRound={liveRound}
+                liveRoundIsPlaying={liveRoundIsPlaying}
+                onChange={setCurrentRound}
+              />
+
+              <div className="space-y-3">
+                {matchesInCurrentRound.length === 0 ? (
+                  <p className="rounded-md border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                    No matches in this round.
+                  </p>
+                ) : (
+                  matchesInCurrentRound.map((m) => (
+                    <MatchCard
+                      key={m.id}
+                      match={m}
+                      playersById={playersById}
+                      onClick={() => setOpenMatchId(m.id)}
+                    />
+                  ))
+                )}
+
+                {/* "Play another round" — visible only on the last round of
+                    a live event. Adds just enough matches for everyone in the
+                    active roster to play once more. Press repeatedly to keep
+                    extending. */}
+                {event.status === "live" &&
+                  totalRounds > 0 &&
+                  currentRound === totalRounds && (
+                    <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-sm">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="font-medium">Need more play?</div>
+                          <div className="text-xs text-muted-foreground">
+                            Adds just enough matches for everyone to play once more. Tap again to keep going.
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={addingRounds}
+                          onClick={async () => {
+                            if (!event) return;
+                            setAddingRounds(true);
+                            try {
+                              const r = await appendOneRotation(event.id);
+                              if (r.matchesAdded > 0) {
+                                toast.success("Rounds added", {
+                                  description: `${r.matchesAdded} new match${
+                                    r.matchesAdded === 1 ? "" : "es"
+                                  } across ${r.rounds - totalRounds} round${
+                                    r.rounds - totalRounds === 1 ? "" : "s"
+                                  }.`,
+                                });
+                                await loadAll();
+                              } else {
+                                toast.info("Nothing to add — no eligible players.");
+                              }
+                            } catch (err) {
+                              const msg =
+                                err instanceof Error
+                                  ? err.message
+                                  : "Unknown error";
+                              toast.error("Couldn't add rounds", {
+                                description: msg,
+                              });
+                            } finally {
+                              setAddingRounds(false);
+                            }
+                          }}
+                        >
+                          {addingRounds ? "Adding…" : "Play another round"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Byes — active roster minus players in this round's matches */}
+                {(() => {
+                  const playingIds = new Set<string>();
+                  for (const m of matchesInCurrentRound) {
+                    for (const id of m.side_a_player_ids) playingIds.add(id);
+                    for (const id of m.side_b_player_ids) playingIds.add(id);
+                  }
+                  const byes = eventPlayers
+                    .filter((ep) => !ep.withdrawn)
+                    .filter((ep) => !playingIds.has(ep.player_id))
+                    .map(
+                      (ep) => playersById[ep.player_id]?.full_name ?? "Unknown"
+                    )
+                    .sort((a, b) =>
+                      a.localeCompare(b, undefined, { sensitivity: "base" })
+                    );
+                  if (byes.length === 0) return null;
+                  return (
+                    <div className="rounded-lg border border-dashed bg-muted/30 p-3">
+                      <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Bye this round · {byes.length}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {byes.join(", ")}
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* STANDINGS TAB */}
+      {tab === "standings" && (
+        <>
+          <StandingsTable
+            standings={computeStandings(
+              eventPlayers.map((ep) => ep.player_id),
+              matches,
+              ((event.config as { tiebreakers?: Tiebreaker[] }).tiebreakers ?? [
+                "wins",
+                "h2h",
+                "point_diff",
+                "points_for",
+              ]) as Tiebreaker[]
+            )}
+            playersById={playersById}
+            eventPlayers={eventPlayers}
+            onPlayerClick={(playerId) => {
+              const ep = eventPlayers.find((x) => x.player_id === playerId);
+              if (ep) setOpenPlayerEpId(ep.id);
+            }}
+          />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Tiebreakers (in order):{" "}
+            {(
+              ((event.config as { tiebreakers?: string[] }).tiebreakers ?? [
+                "wins",
+                "h2h",
+                "point_diff",
+                "points_for",
+              ]) as string[]
+            )
+              .map(tiebreakerLabel)
+              .join(" → ")}
+          </p>
+        </>
+      )}
+
+      {/* BRACKET TAB */}
+      {tab === "bracket" && (
+        <>
+          {(() => {
+            const hasKnockout = matches.some((m) => m.stage !== "group_rr");
+            if (!hasKnockout) {
+              return (
+                <Card className="flex flex-col items-center px-6 py-12 text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Swords className="h-6 w-6" />
+                  </div>
+                  <h2 className="text-lg font-semibold">Playoffs not started</h2>
+                  <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                    Once enough round-robin matches are done, you can end group play and start the bracket.
+                  </p>
+                  {event.status === "live" && (
+                    <Button
+                      size="lg"
+                      className="mt-6"
+                      onClick={() => setStartingKnockout(true)}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      Start playoffs
+                    </Button>
+                  )}
+                </Card>
+              );
+            }
+            return (
+              <BracketView
+                matches={matches}
+                playersById={playersById}
+                onMatchClick={(id) => setOpenMatchId(id)}
+              />
+            );
+          })()}
+        </>
+      )}
+
+      {/* ROSTER TAB */}
+      {tab === "roster" && (() => {
+        // Reorderable while no result has been recorded for any match.
+        // Once any match has a winner, we lock seeding and switch to
+        // alphabetical display.
+        const reorderable = matches.every(
+          (m) => m.status === "scheduled" || m.status === "cancelled"
+        );
+
+        const sorted = [...eventPlayers].map((ep) => ({
+          ep,
+          name: playersById[ep.player_id]?.full_name ?? "Unknown",
+        }));
+        if (reorderable) {
+          sorted.sort((a, b) => (a.ep.seed ?? 999) - (b.ep.seed ?? 999));
+        } else {
+          sorted.sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+          );
+        }
+
+        const reorder = async (fromIdx: number, toIdx: number) => {
+          if (fromIdx === toIdx) return;
+          const ids = sorted.map((s) => s.ep.id);
+          const [moved] = ids.splice(fromIdx, 1);
+          ids.splice(toIdx, 0, moved);
+          // Reassign seeds 1..N based on the new order
+          for (let i = 0; i < ids.length; i++) {
+            await supabase
+              .from("rr_event_players")
+              .update({ seed: i + 1 })
+              .eq("id", ids[i]);
+          }
+          await loadAll();
+        };
+
+        return (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {eventPlayers.length} player{eventPlayers.length === 1 ? "" : "s"}
+                {!reorderable && " · alphabetical"}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAddingPlayer(true)}
+              >
+                <UserPlus className="h-4 w-4" />
+                Add player
+              </Button>
+            </div>
+            <Card className="overflow-hidden">
+              {eventPlayers.length === 0 ? (
+                <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  No players yet. Tap "Add player" above to get started.
+                </p>
+              ) : (
+                <ul className="divide-y">
+                  {sorted.map(({ ep, name }, idx) => {
+                    const isDragging = draggingEpId === ep.id;
+                    const isHover =
+                      hoverEpId === ep.id && draggingEpId !== ep.id;
+                    return (
+                    <li
+                      key={ep.id}
+                      draggable={reorderable}
+                      onDragStart={(e) => {
+                        if (!reorderable) return;
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", ep.id);
+                        setDraggingEpId(ep.id);
+                      }}
+                      onDragOver={(e) => {
+                        if (!reorderable || !draggingEpId) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        setHoverEpId(ep.id);
+                      }}
+                      onDragLeave={() => {
+                        if (hoverEpId === ep.id) setHoverEpId(null);
+                      }}
+                      onDrop={async (e) => {
+                        if (!reorderable || !draggingEpId) return;
+                        e.preventDefault();
+                        const fromIdx = sorted.findIndex(
+                          (s) => s.ep.id === draggingEpId
+                        );
+                        if (fromIdx >= 0) await reorder(fromIdx, idx);
+                        setDraggingEpId(null);
+                        setHoverEpId(null);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingEpId(null);
+                        setHoverEpId(null);
+                      }}
+                      className={cn(
+                        "group flex items-center gap-2 px-3 py-2 transition-colors",
+                        isDragging && "opacity-40",
+                        isHover && "border-t-2 border-primary"
+                      )}
+                    >
+                      {reorderable && (
+                        <span
+                          className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
+                          aria-hidden
+                          title="Drag to reorder"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setOpenPlayerEpId(ep.id)}
+                        className="flex flex-1 items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          {reorderable && (
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                              #{ep.seed ?? "—"}
+                            </span>
+                          )}
+                          <span
+                            className={cn(
+                              "truncate text-sm",
+                              ep.withdrawn && "text-muted-foreground line-through"
+                            )}
+                          >
+                            {name}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          {ep.withdrawn && (
+                            <Badge variant="forfeit">Withdrawn</Badge>
+                          )}
+                          <span
+                            aria-hidden
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+            <p className="mt-3 text-xs text-muted-foreground">
+              {reorderable
+                ? "Drag the grip handle to reorder seeding. Higher in the list = top seed. Locked once any match is played."
+                : "Sorted alphabetically. Seeding is locked once any match has been played."}
+            </p>
+          </>
+        );
+      })()}
+
+      {/* Player detail sheet */}
+      {(() => {
+        const ep = eventPlayers.find((x) => x.id === openPlayerEpId) ?? null;
+        const p = ep ? playersById[ep.player_id] ?? null : null;
+        return (
+          <PlayerDetailSheet
+            open={openPlayerEpId !== null}
+            onClose={() => setOpenPlayerEpId(null)}
+            event={event}
+            eventPlayer={ep}
+            player={p}
+            matches={matches}
+            playersById={playersById}
+            liveRound={liveRound}
+            onChanged={loadAll}
+            onSwapClick={(pid) => {
+              setOpenPlayerEpId(null);
+              setSwappingPlayerId(pid);
+            }}
+          />
+        );
+      })()}
+
+      {/* Score entry sheet */}
+      {(() => {
+        const m = matches.find((x) => x.id === openMatchId) ?? null;
+        return (
+          <ScoreSheet
+            open={openMatchId !== null}
+            onClose={() => setOpenMatchId(null)}
+            match={m}
+            scoring={event.scoring_template as ScoringTemplate}
+            playersById={playersById}
+            onSaved={handleScoreSaved}
+            allMatches={matches}
+            liveRound={liveRound}
+            onSubstituteClick={(side, outgoingPlayerId) => {
+              if (m) {
+                setSubbingMatchId(m.id);
+                setSubbingSide(side);
+                setSubbingOutgoingId(outgoingPlayerId);
+                setOpenMatchId(null);
+              }
+            }}
+          />
+        );
+      })()}
+
+      {/* Event edit sheet */}
+      <EventEditSheet
+        open={editingEvent}
+        onClose={() => setEditingEvent(false)}
+        event={event}
+        hasMatches={matches.length > 0}
+        hasScores={matches.some(
+          (m) => m.status === "completed" || m.scores != null
+        )}
+        onSaved={handleRosterOrSettingsChanged}
+      />
+
+      {/* Roster add sheet */}
+      <RosterAddSheet
+        open={addingPlayer}
+        onClose={() => setAddingPlayer(false)}
+        eventId={event.id}
+        eventMode={event.mode}
+        hasSchedule={matches.length > 0}
+        existingPlayerIds={eventPlayers.map((ep) => ep.player_id)}
+        liveRound={liveRound}
+        onAdded={handleRosterOrSettingsChanged}
+      />
+
+      {/* Finalize event sheet */}
+      <FinalizeEventSheet
+        open={finalizing}
+        onClose={() => setFinalizing(false)}
+        event={event}
+        matches={matches}
+        onFinalized={loadAll}
+      />
+
+      {/* Start knockout sheet */}
+      <StartKnockoutSheet
+        open={startingKnockout}
+        onClose={() => setStartingKnockout(false)}
+        event={event}
+        matches={matches}
+        eventPlayers={eventPlayers}
+        playersById={playersById}
+        onStarted={loadAll}
+      />
+
+      {/* Player swap sheet */}
+      <PlayerSwapSheet
+        open={swappingPlayerId !== null}
+        onClose={() => setSwappingPlayerId(null)}
+        fromPlayerId={swappingPlayerId}
+        eventId={event.id}
+        eventPlayers={eventPlayers}
+        matches={matches}
+        playersById={playersById}
+        onSwapped={handleRosterOrSettingsChanged}
+      />
+
+      {/* Clone event sheet */}
+      <CloneEventSheet
+        open={cloning}
+        onClose={() => setCloning(false)}
+        event={event}
+        rosterCount={eventPlayers.length}
+      />
+
+      {/* Match-level substitute sheet */}
+      {(() => {
+        const subMatch =
+          matches.find((x) => x.id === subbingMatchId) ?? null;
+        return (
+          <MatchSubstituteSheet
+            open={subbingMatchId !== null && subbingSide !== null}
+            onClose={() => {
+              setSubbingMatchId(null);
+              setSubbingSide(null);
+              setSubbingOutgoingId(null);
+            }}
+            match={subMatch}
+            side={subbingSide}
+            outgoingPlayerId={subbingOutgoingId}
+            eventPlayers={eventPlayers}
+            playersById={playersById}
+            onSaved={loadAll}
+          />
+        );
+      })()}
+    </div>
+  );
+}
+
+function TabButton({
+  children,
+  active,
+  onClick,
+}: {
+  children: ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+        active
+          ? "bg-background shadow-sm"
+          : "text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function tiebreakerLabel(tb: string): string {
+  switch (tb) {
+    case "wins":
+      return "Wins";
+    case "h2h":
+      return "Head-to-head";
+    case "point_diff":
+      return "Point diff";
+    case "points_for":
+      return "Points scored";
+    case "points_against":
+      return "Points conceded";
+    default:
+      return tb;
+  }
+}
+
+function EventStatusBadge({ status }: { status: EventRow["status"] }) {
+  if (status === "draft") return <Badge variant="draft">Draft</Badge>;
+  if (status === "live") return <Badge variant="live">Live</Badge>;
+  if (status === "completed") return <Badge variant="completed">Completed</Badge>;
+  return <Badge variant="outline">Archived</Badge>;
+}
