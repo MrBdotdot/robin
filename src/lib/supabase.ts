@@ -1,5 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -11,10 +10,12 @@ if (!url || !key) {
   );
 }
 
-export const supabase = createClient<Database>(url, key, {
+// Untyped client. We tried generic-typing with our hand-written `Database`
+// type, but supabase-js v2.105+ requires a stricter Database shape than is
+// worth maintaining by hand. Type safety on rows is preserved at call sites
+// via explicit `as` casts and the local TypeScript types in `@/types/database`.
+export const supabase: SupabaseClient = createClient(url, key, {
   auth: {
-    // We don't use Supabase Auth (we have our own password gate),
-    // so disable session persistence to keep things tidy.
     persistSession: false,
     autoRefreshToken: false,
   },

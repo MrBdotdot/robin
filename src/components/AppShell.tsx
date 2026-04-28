@@ -12,7 +12,6 @@ const NAV = [
 export function AppShell() {
   return (
     <div className="flex min-h-full flex-col md:flex-row">
-      {/* Desktop sidebar (md+) */}
       <aside className="hidden border-r bg-card md:flex md:w-56 md:flex-col">
         <div className="flex h-14 items-center border-b px-5">
           <span className="font-display text-lg uppercase tracking-tight">
@@ -40,29 +39,24 @@ export function AppShell() {
         </nav>
       </aside>
 
-      {/* Mobile top bar (sm only) */}
       <header className="flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
         <span className="font-display text-base uppercase tracking-tight">
           Round Robin
         </span>
       </header>
 
-      {/* Main content */}
       <main
         className={cn(
           "flex-1 overflow-y-auto",
-          // bottom padding on mobile so the floating bottom nav doesn't clip content
           "pb-20 md:pb-0"
         )}
       >
         <Outlet />
       </main>
 
-      {/* Mobile bottom nav (sm only) */}
       <nav
         className={cn(
           "fixed inset-x-0 bottom-0 z-40 flex border-t bg-card md:hidden",
-          // Safe-area padding for iOS home indicator
           "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
         )}
       >

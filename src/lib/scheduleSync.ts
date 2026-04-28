@@ -198,8 +198,8 @@ export async function pushPlayerToBack(
           m.id !== pMatch.id &&
           m.round === pMatch.round &&
           m.status === "scheduled" &&
-          (m.side_a_player_ids.some((id) => cPlayers.includes(id)) ||
-            m.side_b_player_ids.some((id) => cPlayers.includes(id)))
+          (m.side_a_player_ids.some((id: string) => cPlayers.includes(id)) ||
+            m.side_b_player_ids.some((id: string) => cPlayers.includes(id)))
       );
       if (cPlayerInSourceRound) continue;
 

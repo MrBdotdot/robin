@@ -162,7 +162,6 @@ export default function EventsList() {
                   {labelForStatus(status)} · {list.length}
                 </h2>
                 {isLive ? (
-                  // Bento layout: first live event spans both columns on desktop
                   <div className="grid gap-3 sm:grid-cols-2">
                     {list.map((e, idx) => (
                       <div

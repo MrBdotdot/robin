@@ -7,11 +7,8 @@ import { cn } from "@/lib/utils";
 
 interface EventCardProps {
   event: EventRow;
-  /** Featured cards are taller and show extra info — used for live events. */
   featured?: boolean;
-  /** Optional roster size shown when known. */
   playerCount?: number;
-  /** Triggered when the user taps the inline delete button. */
   onDelete?: (eventId: string) => void;
 }
 
@@ -53,8 +50,6 @@ export function EventCard({
         className={cn(
           "bento-card group relative overflow-hidden transition-colors",
           "hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring",
-          // Featured: bold Pantone-style block — solid color fill, dark ink.
-          // Sun Glare for live, Blue Violet otherwise.
           featured && "min-h-[180px] border-2",
           featured && event.status === "live"
             ? "bg-accent text-accent-foreground hover:bg-accent"

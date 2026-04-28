@@ -177,9 +177,6 @@ export default function EventDetail() {
   }, [matches]);
 
   const liveRound = useMemo(() => {
-    // "Current" = earliest round that still has a match yet to play.
-    // Forfeits, walkovers, and cancellations count as resolved, so they don't
-    // keep a round current.
     const incomplete = matches
       .filter(
         (m) => m.status === "scheduled" || m.status === "in_progress"
@@ -196,7 +193,6 @@ export default function EventDetail() {
     );
   }, [matches, liveRound]);
 
-  // Snap to live round on first load
   useEffect(() => {
     if (liveRound != null) setCurrentRound(liveRound);
     else if (totalRounds > 0) setCurrentRound(1);
@@ -241,7 +237,6 @@ export default function EventDetail() {
         status: "scheduled" as const,
       }));
 
-      // Insert matches and flip event to live in parallel
       const [{ error: insErr }, { error: upErr }] = await Promise.all([
         supabase.from("rr_matches").insert(rows),
         supabase
@@ -382,7 +377,6 @@ export default function EventDetail() {
         </div>
       </header>
 
-      {/* Tabs */}
       <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
         <TabButton active={tab === "schedule"} onClick={() => setTab("schedule")}>
           Schedule
@@ -400,7 +394,6 @@ export default function EventDetail() {
         </TabButton>
       </div>
 
-      {/* SCHEDULE TAB */}
       {tab === "schedule" && (
         <>
           {!matchesExist ? (
@@ -461,10 +454,6 @@ export default function EventDetail() {
                   ))
                 )}
 
-                {/* "Play another round" — visible only on the last round of
-                    a live event. Adds just enough matches for everyone in the
-                    active roster to play once more. Press repeatedly to keep
-                    extending. */}
                 {event.status === "live" &&
                   totalRounds > 0 &&
                   currentRound === totalRounds && (
@@ -516,7 +505,6 @@ export default function EventDetail() {
                     </div>
                   )}
 
-                {/* Byes — active roster minus players in this round's matches */}
                 {(() => {
                   const playingIds = new Set<string>();
                   for (const m of matchesInCurrentRound) {
@@ -550,7 +538,6 @@ export default function EventDetail() {
         </>
       )}
 
-      {/* STANDINGS TAB */}
       {tab === "standings" && (
         <>
           <StandingsTable
@@ -587,7 +574,6 @@ export default function EventDetail() {
         </>
       )}
 
-      {/* BRACKET TAB */}
       {tab === "bracket" && (
         <>
           {(() => {
@@ -626,11 +612,7 @@ export default function EventDetail() {
         </>
       )}
 
-      {/* ROSTER TAB */}
       {tab === "roster" && (() => {
-        // Reorderable while no result has been recorded for any match.
-        // Once any match has a winner, we lock seeding and switch to
-        // alphabetical display.
         const reorderable = matches.every(
           (m) => m.status === "scheduled" || m.status === "cancelled"
         );
@@ -652,7 +634,6 @@ export default function EventDetail() {
           const ids = sorted.map((s) => s.ep.id);
           const [moved] = ids.splice(fromIdx, 1);
           ids.splice(toIdx, 0, moved);
-          // Reassign seeds 1..N based on the new order
           for (let i = 0; i < ids.length; i++) {
             await supabase
               .from("rr_event_players")
@@ -784,7 +765,6 @@ export default function EventDetail() {
         );
       })()}
 
-      {/* Player detail sheet */}
       {(() => {
         const ep = eventPlayers.find((x) => x.id === openPlayerEpId) ?? null;
         const p = ep ? playersById[ep.player_id] ?? null : null;
@@ -807,7 +787,6 @@ export default function EventDetail() {
         );
       })()}
 
-      {/* Score entry sheet */}
       {(() => {
         const m = matches.find((x) => x.id === openMatchId) ?? null;
         return (
@@ -832,7 +811,6 @@ export default function EventDetail() {
         );
       })()}
 
-      {/* Event edit sheet */}
       <EventEditSheet
         open={editingEvent}
         onClose={() => setEditingEvent(false)}
@@ -844,7 +822,6 @@ export default function EventDetail() {
         onSaved={handleRosterOrSettingsChanged}
       />
 
-      {/* Roster add sheet */}
       <RosterAddSheet
         open={addingPlayer}
         onClose={() => setAddingPlayer(false)}
@@ -856,7 +833,6 @@ export default function EventDetail() {
         onAdded={handleRosterOrSettingsChanged}
       />
 
-      {/* Finalize event sheet */}
       <FinalizeEventSheet
         open={finalizing}
         onClose={() => setFinalizing(false)}
@@ -865,7 +841,6 @@ export default function EventDetail() {
         onFinalized={loadAll}
       />
 
-      {/* Start knockout sheet */}
       <StartKnockoutSheet
         open={startingKnockout}
         onClose={() => setStartingKnockout(false)}
@@ -876,7 +851,6 @@ export default function EventDetail() {
         onStarted={loadAll}
       />
 
-      {/* Player swap sheet */}
       <PlayerSwapSheet
         open={swappingPlayerId !== null}
         onClose={() => setSwappingPlayerId(null)}
@@ -888,7 +862,6 @@ export default function EventDetail() {
         onSwapped={handleRosterOrSettingsChanged}
       />
 
-      {/* Clone event sheet */}
       <CloneEventSheet
         open={cloning}
         onClose={() => setCloning(false)}
@@ -896,7 +869,6 @@ export default function EventDetail() {
         rosterCount={eventPlayers.length}
       />
 
-      {/* Match-level substitute sheet */}
       {(() => {
         const subMatch =
           matches.find((x) => x.id === subbingMatchId) ?? null;

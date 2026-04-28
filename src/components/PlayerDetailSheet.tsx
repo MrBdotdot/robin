@@ -19,7 +19,6 @@ import type {
   MatchRow,
   Player,
 } from "@/types/database";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";

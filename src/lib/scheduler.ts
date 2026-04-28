@@ -412,7 +412,7 @@ export function generateScheduleForMode(
  * Helper: how many rounds will a schedule have for the given mode + size?
  * Useful for showing a preview before generating.
  */
-export function estimateRoundCount(mode: "singles" | "doubles_americano", numPlayers: number): number {
+export function estimateRoundCount(_mode: "singles" | "doubles_americano", numPlayers: number): number {
   if (numPlayers < 2) return 0;
   // Berger always produces N-1 rounds (or N if padded with a bye, but the bye round
   // produces no real matches so we can still report N-1).

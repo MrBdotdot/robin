@@ -33,18 +33,10 @@ export type EventConfig = {
   tiebreakers?: Array<"wins" | "h2h" | "point_diff" | "points_for" | "points_against">;
   num_groups?: number;
   advance_per_group?: number;
-  knockout_depth?: number; // 1 = final only, 2 = SF+F, 3 = QF+SF+F, ...
+  knockout_depth?: number;
   include_bronze?: boolean;
-  /** Stagger sub-rounds so a player who just played gets a rest before
-   *  their next appearance. Only meaningful when matches per Berger round
-   *  exceed numCourts (so rounds get split). */
   avoid_back_to_back?: boolean;
-  /** Bias scheduling against pairing players who just played each other or
-   *  partnered together. Helps spread out repeat matchups. */
   avoid_recent_matchups?: boolean;
-  /** When on, fill empty courts with extra "bonus" matches by pulling in
-   *  players who've already played. Reduces idle time at the cost of strict
-   *  round-robin fairness (some matchups will repeat). */
   fill_empty_courts?: boolean;
 };
 
@@ -137,56 +129,64 @@ export interface MatchRow {
 /**
  * Minimal Database type for the typed Supabase client. We only need
  * Row / Insert / Update for tables we actually touch from the client.
+ *
+ * NOTE: supabase-js v2.105+ requires a `Relationships: []` field on each
+ * table for the type to satisfy `GenericTable` and unlock typed queries.
  */
 export type Database = {
   public: {
     Tables: {
       rr_events: {
         Row: EventRow;
-        Insert: Omit<EventRow, "id" | "created_at"> & {
-          id?: string;
-          created_at?: string;
+        Insert: Partial<EventRow> & {
+          name: string;
+          sport: string;
+          mode: EventMode;
+          format: EventFormat;
+          scoring_template: ScoringTemplate;
+          config: EventConfig;
         };
         Update: Partial<EventRow>;
+        Relationships: [];
       };
       rr_players: {
         Row: Player;
-        Insert: Omit<Player, "id" | "created_at" | "matches_played"> & {
-          id?: string;
-          created_at?: string;
-          matches_played?: number;
-        };
+        Insert: Partial<Player> & { full_name: string };
         Update: Partial<Player>;
+        Relationships: [];
       };
       rr_event_players: {
         Row: EventPlayer;
-        Insert: Omit<EventPlayer, "id" | "added_at"> & {
-          id?: string;
-          added_at?: string;
+        Insert: Partial<EventPlayer> & {
+          event_id: string;
+          player_id: string;
         };
         Update: Partial<EventPlayer>;
+        Relationships: [];
       };
       rr_matches: {
         Row: MatchRow;
-        Insert: Omit<MatchRow, "id" | "created_at" | "updated_at"> & {
-          id?: string;
-          created_at?: string;
-          updated_at?: string;
+        Insert: Partial<MatchRow> & {
+          event_id: string;
+          stage: MatchStage;
+          round: number;
+          side_a_player_ids: string[];
+          side_b_player_ids: string[];
+          status: MatchStatus;
         };
         Update: Partial<MatchRow>;
+        Relationships: [];
       };
       rr_series: {
         Row: Series;
-        Insert: Omit<Series, "id" | "created_at"> & {
-          id?: string;
-          created_at?: string;
-        };
+        Insert: Partial<Series> & { name: string };
         Update: Partial<Series>;
+        Relationships: [];
       };
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
+    Views: {};
+    Functions: {};
+    Enums: {};
+    CompositeTypes: {};
   };
 };

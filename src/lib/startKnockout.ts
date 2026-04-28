@@ -2,9 +2,7 @@ import { supabase } from "./supabase";
 import { computeStandings, type Tiebreaker } from "./standings";
 import { generateBracket, nextRound, feederPositions } from "./bracket";
 import type {
-  EventRow,
   EventConfig,
-  EventPlayer,
   MatchRow,
 } from "@/types/database";
 
@@ -137,7 +135,7 @@ export async function startKnockout(
     const firstLabel = specs[0]?.knockout_round ?? "f";
     const roundOrder = ["r16", "qf", "sf", "f", "bronze"] as const;
 
-    inserts = specs.map((spec, idx) => {
+    inserts = specs.map((spec, _idx) => {
       const isFirstRound = spec.knockout_round === firstLabel;
       const aPlayer = spec.side_a_seed
         ? [seedToPlayerId[spec.side_a_seed]]
