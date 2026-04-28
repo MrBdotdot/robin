@@ -31,6 +31,10 @@ interface SchedulerOptions {
    *  in players who've already played. Reduces idle time at the cost of
    *  strict round-robin uniqueness (some matchups will repeat). */
   fillEmptyCourts?: boolean;
+  /** Optional hard cap on rounds. When set, the schedule is truncated to
+   *  this many rounds (kept in source order) so every player plays at
+   *  most that many group-stage rounds. */
+  minRoundsPerPlayer?: number;
 }
 
 const BYE = "__BYE__";
@@ -403,9 +407,18 @@ export function generateScheduleForMode(
   playerIds: string[],
   opts: SchedulerOptions = {}
 ): ScheduledMatch[] {
-  return mode === "singles"
-    ? generateSinglesSchedule(playerIds, opts)
-    : generateDoublesAmericano(playerIds, opts);
+  const all =
+    mode === "singles"
+      ? generateSinglesSchedule(playerIds, opts)
+      : generateDoublesAmericano(playerIds, opts);
+  // If the user set a min/cap on rounds, truncate. Each player plays at most
+  // `minRoundsPerPlayer` rounds in group play before transitioning to
+  // playoffs (which the user triggers manually).
+  const cap = opts.minRoundsPerPlayer;
+  if (cap && cap > 0) {
+    return all.filter((m) => m.round <= cap);
+  }
+  return all;
 }
 
 /**

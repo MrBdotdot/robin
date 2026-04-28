@@ -29,6 +29,8 @@ export interface WizardState {
   avoidBackToBack: boolean;
   avoidRecentMatchups: boolean;
   fillEmptyCourts: boolean;
+  /** 0 = full round-robin (no cap). Otherwise the per-player round cap. */
+  minRoundsPerPlayer: number;
   // Step 5
   playerNames: string[];
 }
@@ -63,6 +65,7 @@ export const initialWizardState = (): WizardState => ({
   avoidBackToBack: true,
   avoidRecentMatchups: true,
   fillEmptyCourts: true,
+  minRoundsPerPlayer: 0,
   playerNames: [],
 });
 

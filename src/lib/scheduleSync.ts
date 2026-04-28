@@ -383,11 +383,18 @@ export async function regenerateFutureSchedule(
   if (activeIds.length >= minPlayers) {
     const cfgFull = event.config as EventConfig;
     const numCourts = cfgFull.num_courts ?? 1;
+    // Honor the min/cap rounds setting. The cap is total rounds across
+    // group play, so subtract however many frozen rounds we already kept.
+    const totalCap = cfgFull.min_rounds_per_player;
+    const remainingCap = totalCap && totalCap > 0
+      ? Math.max(0, totalCap - maxFrozenRound)
+      : undefined;
     const newSchedule = generateScheduleForMode(event.mode, activeIds, {
       numCourts,
       avoidBackToBack: cfgFull.avoid_back_to_back ?? false,
       avoidRecentMatchups: cfgFull.avoid_recent_matchups ?? false,
       fillEmptyCourts: cfgFull.fill_empty_courts ?? false,
+      minRoundsPerPlayer: remainingCap,
     });
 
     if (newSchedule.length > 0) {

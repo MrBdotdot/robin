@@ -40,6 +40,9 @@ function buildConfig(s: WizardState): EventConfig & { seeding_strategy?: string 
     avoid_recent_matchups: s.avoidRecentMatchups,
     fill_empty_courts: s.fillEmptyCourts,
   };
+  if (s.minRoundsPerPlayer && s.minRoundsPerPlayer > 0) {
+    config.min_rounds_per_player = s.minRoundsPerPlayer;
+  }
   if (s.format === "rr_knockout") {
     config.knockout_depth = s.knockoutDepth;
     config.num_groups = s.numGroups;
@@ -188,6 +191,7 @@ export async function submitWizard(s: WizardState): Promise<string> {
         avoidBackToBack: s.avoidBackToBack,
         avoidRecentMatchups: s.avoidRecentMatchups,
         fillEmptyCourts: s.fillEmptyCourts,
+        minRoundsPerPlayer: s.minRoundsPerPlayer || undefined,
       });
       if (schedule.length > 0) {
         const matchRows = schedule.map((m) => ({

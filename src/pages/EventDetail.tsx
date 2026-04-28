@@ -174,6 +174,36 @@ export default function EventDetail() {
     return Math.max(...matches.map((m) => m.round));
   }, [matches]);
 
+  // Per-round completion summary for the chip strip — only counts group-stage
+  // round-robin matches (knockout matches live in their own tab).
+  const roundSummaries = useMemo(() => {
+    if (totalRounds === 0) return [];
+    const arr: { total: number; done: number; inProgress: number }[] =
+      Array.from({ length: totalRounds }, () => ({
+        total: 0,
+        done: 0,
+        inProgress: 0,
+      }));
+    for (const m of matches) {
+      if (m.stage !== "group_rr") continue;
+      const idx = m.round - 1;
+      if (idx < 0 || idx >= arr.length) continue;
+      arr[idx].total += 1;
+      if (
+        m.status === "completed" ||
+        m.status === "forfeit_a" ||
+        m.status === "forfeit_b" ||
+        m.status === "walkover" ||
+        m.status === "cancelled"
+      ) {
+        arr[idx].done += 1;
+      } else if (m.status === "in_progress") {
+        arr[idx].inProgress += 1;
+      }
+    }
+    return arr;
+  }, [matches, totalRounds]);
+
   const liveRound = useMemo(() => {
     const incomplete = matches
       .filter(
@@ -223,6 +253,7 @@ export default function EventDetail() {
         avoidBackToBack,
         avoidRecentMatchups,
         fillEmptyCourts,
+        minRoundsPerPlayer: cfg.min_rounds_per_player,
       });
 
       const rows = schedule.map((m) => ({
@@ -410,6 +441,7 @@ export default function EventDetail() {
                 liveRound={liveRound}
                 liveRoundIsPlaying={liveRoundIsPlaying}
                 onChange={setCurrentRound}
+                roundSummaries={roundSummaries}
               />
 
               <div className="space-y-3">

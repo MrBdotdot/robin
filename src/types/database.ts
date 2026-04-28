@@ -38,6 +38,11 @@ export type EventConfig = {
   avoid_back_to_back?: boolean;
   avoid_recent_matchups?: boolean;
   fill_empty_courts?: boolean;
+  /** Optional cap: each player plays at most this many rounds in group
+   *  play. When unset, the full N-1 round-robin is generated. Useful for
+   *  events that should transition to playoffs after a fixed number of
+   *  rounds rather than playing the entire round-robin. */
+  min_rounds_per_player?: number;
 };
 
 export interface Player {

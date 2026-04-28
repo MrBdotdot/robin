@@ -71,6 +71,28 @@ export function Step4Settings({ s, set }: StepProps) {
         </p>
       </FormField>
 
+      <FormField
+        label="Cap on group-play rounds (optional)"
+        htmlFor="min-rounds"
+      >
+        <Input
+          id="min-rounds"
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={s.minRoundsPerPlayer || ""}
+          onChange={(e) =>
+            set("minRoundsPerPlayer", Math.max(0, Number(e.target.value) || 0))
+          }
+          placeholder="Leave blank for full round-robin"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Sets a maximum number of group-play rounds before the playoffs.
+          Useful for big rosters where a full round-robin would take too long.
+          Leave blank or set to 0 to play the entire round-robin.
+        </p>
+      </FormField>
+
       <FormField label="Smart scheduling">
         <ToggleRow
           active={s.avoidBackToBack}

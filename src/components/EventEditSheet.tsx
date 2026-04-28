@@ -24,6 +24,7 @@ interface DraftEvent {
   sport: string;
   scheduledDate: string;
   numCourts: number;
+  minRoundsPerPlayer: number;
   avoidBackToBack: boolean;
   avoidRecentMatchups: boolean;
   fillEmptyCourts: boolean;
@@ -38,6 +39,7 @@ function draftFrom(event: EventRow): DraftEvent {
     sport: event.sport,
     scheduledDate: event.scheduled_date ?? "",
     numCourts: cfg.num_courts ?? 1,
+    minRoundsPerPlayer: cfg.min_rounds_per_player ?? 0,
     avoidBackToBack: cfg.avoid_back_to_back ?? false,
     avoidRecentMatchups: cfg.avoid_recent_matchups ?? false,
     fillEmptyCourts: cfg.fill_empty_courts ?? false,
@@ -96,6 +98,11 @@ export function EventEditSheet({
         avoid_recent_matchups: draft.avoidRecentMatchups,
         fill_empty_courts: draft.fillEmptyCourts,
       };
+      if (draft.minRoundsPerPlayer && draft.minRoundsPerPlayer > 0) {
+        newConfig.min_rounds_per_player = draft.minRoundsPerPlayer;
+      } else {
+        delete newConfig.min_rounds_per_player;
+      }
 
       const { error } = await supabase
         .from("rr_events")
@@ -186,6 +193,29 @@ export function EventEditSheet({
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Affects how upcoming matches are split. Existing matches keep their court numbers.
+          </p>
+        </Field>
+
+        <Field
+          label="Cap on group-play rounds (optional)"
+          htmlFor="ev-min-rounds"
+        >
+          <Input
+            id="ev-min-rounds"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={draft.minRoundsPerPlayer || ""}
+            onChange={(e) =>
+              set(
+                "minRoundsPerPlayer",
+                Math.max(0, Number(e.target.value) || 0)
+              )
+            }
+            placeholder="Leave blank for full round-robin"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Hard cap on group-stage rounds. Leave blank for the full round-robin. Future rounds beyond the cap are removed when you save.
           </p>
         </Field>
 
