@@ -175,20 +175,31 @@ export default function EventDetail() {
   }, [matches]);
 
   // Per-round completion summary for the chip strip — only counts group-stage
-  // round-robin matches (knockout matches live in their own tab).
+  // round-robin matches (knockout matches live in their own tab). Also captures
+  // each round's Berger group id so the strip can visually group sub-rounds
+  // that came from the same logical Berger round (split because of court
+  // count).
   const roundSummaries = useMemo(() => {
     if (totalRounds === 0) return [];
-    const arr: { total: number; done: number; inProgress: number }[] =
-      Array.from({ length: totalRounds }, () => ({
-        total: 0,
-        done: 0,
-        inProgress: 0,
-      }));
+    const arr: {
+      total: number;
+      done: number;
+      inProgress: number;
+      bergerGroup: string | null;
+    }[] = Array.from({ length: totalRounds }, () => ({
+      total: 0,
+      done: 0,
+      inProgress: 0,
+      bergerGroup: null,
+    }));
     for (const m of matches) {
       if (m.stage !== "group_rr") continue;
       const idx = m.round - 1;
       if (idx < 0 || idx >= arr.length) continue;
       arr[idx].total += 1;
+      if (arr[idx].bergerGroup == null && m.group_label) {
+        arr[idx].bergerGroup = m.group_label;
+      }
       if (
         m.status === "completed" ||
         m.status === "forfeit_a" ||
@@ -264,6 +275,7 @@ export default function EventDetail() {
         side_a_player_ids: m.sideA,
         side_b_player_ids: m.sideB,
         status: "scheduled" as const,
+        group_label: String(m.bergerRound),
       }));
 
       const [{ error: insErr }, { error: upErr }] = await Promise.all([

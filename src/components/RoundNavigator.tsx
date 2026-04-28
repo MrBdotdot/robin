@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,10 @@ interface RoundSummary {
   total: number;
   done: number; // completed | forfeit_a | forfeit_b | walkover | cancelled
   inProgress: number;
+  /** Identifier of the parent Berger round. Multiple consecutive rounds
+   *  sharing the same group are sub-rounds from the same Berger round
+   *  that were split due to court count. */
+  bergerGroup?: string | null;
 }
 
 interface RoundNavigatorProps {
@@ -60,6 +64,22 @@ export function RoundNavigator({
     }
     return { done, totalMatches, inProgress };
   }, [roundSummaries]);
+
+  // Berger sub-round context — when the current round is one of N rounds
+  // sharing the same Berger group, surface it so users understand why two
+  // (or more) rounds belong together.
+  const bergerContext = useMemo(() => {
+    if (!roundSummaries || roundSummaries.length === 0) return null;
+    const cur = roundSummaries[current - 1];
+    if (!cur || !cur.bergerGroup) return null;
+    const peers: number[] = [];
+    roundSummaries.forEach((r, i) => {
+      if (r.bergerGroup === cur.bergerGroup) peers.push(i + 1);
+    });
+    if (peers.length <= 1) return null;
+    const myPos = peers.indexOf(current) + 1;
+    return { myPos, total: peers.length, peers };
+  }, [roundSummaries, current]);
 
   const startEdit = () => {
     setDraft(String(current));
@@ -149,6 +169,15 @@ export function RoundNavigator({
               </span>
             )}
           </div>
+          {bergerContext && (
+            <p
+              className="mt-0.5 text-[11px] text-muted-foreground"
+              title="A single round was split into multiple sub-rounds because there are more matches than courts."
+            >
+              Set {bergerContext.myPos} of {bergerContext.total} (split for
+              court count)
+            </p>
+          )}
           {liveRound != null && liveRound !== current && (
             <button
               type="button"
@@ -238,11 +267,12 @@ function RoundChipStrip({
         ref={stripRef}
         role="tablist"
         aria-label="Round timeline"
-        className="flex gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] md:px-6"
+        className="flex items-center gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] md:px-6"
       >
         {Array.from({ length: total }, (_, i) => {
           const round = i + 1;
           const summary = roundSummaries?.[i];
+          const prevSummary = i > 0 ? roundSummaries?.[i - 1] : null;
           const isActive = round === current;
           const isLive = liveRound != null && round === liveRound;
           const isPast = liveRound != null && round < liveRound;
@@ -250,6 +280,19 @@ function RoundChipStrip({
           const isFullyDone =
             summary != null && summary.total > 0 && summary.done === summary.total;
           const hasInProgress = summary != null && summary.inProgress > 0;
+          // Insert a vertical divider between this chip and the previous one
+          // when the Berger group changes (i.e., this chip is the first
+          // sub-round of a new logical round).
+          const newBergerGroup =
+            i > 0 &&
+            summary?.bergerGroup != null &&
+            prevSummary?.bergerGroup != null &&
+            summary.bergerGroup !== prevSummary.bergerGroup;
+          const continuesBergerGroup =
+            i > 0 &&
+            summary?.bergerGroup != null &&
+            prevSummary?.bergerGroup != null &&
+            summary.bergerGroup === prevSummary.bergerGroup;
 
           // Tone — keeps WCAG AA contrast for the inner text
           const tone = isActive
@@ -280,8 +323,21 @@ function RoundChipStrip({
             : `Round ${round}${isLive ? " (current)" : isPast ? " (past)" : ""}`;
 
           return (
+            <Fragment key={round}>
+              {newBergerGroup && (
+                <span
+                  aria-hidden
+                  className="mx-1 h-5 w-px shrink-0 bg-border"
+                />
+              )}
+              {continuesBergerGroup && (
+                <span
+                  aria-hidden
+                  className="-mx-1 h-px w-3 shrink-0 bg-border/60"
+                  title="Same round, split sub-rounds"
+                />
+              )}
             <button
-              key={round}
               ref={isActive ? activeRef : undefined}
               type="button"
               role="tab"
@@ -315,6 +371,7 @@ function RoundChipStrip({
                 />
               )}
             </button>
+            </Fragment>
           );
         })}
       </div>

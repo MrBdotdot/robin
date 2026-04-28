@@ -99,6 +99,9 @@ export async function appendOneRotation(
     side_a_player_ids: m.sideA,
     side_b_player_ids: m.sideB,
     status: "scheduled" as const,
+    // Offset Berger group id so it doesn't collide with frozen rounds'
+    // identifiers when grouped in the chip strip.
+    group_label: String(maxExistingRound + m.bergerRound),
   }));
 
   const { error: insErr } = await supabase
@@ -406,6 +409,7 @@ export async function regenerateFutureSchedule(
         side_a_player_ids: m.sideA,
         side_b_player_ids: m.sideB,
         status: "scheduled" as const,
+        group_label: String(maxFrozenRound + m.bergerRound),
       }));
 
       const { error: insErr } = await supabase

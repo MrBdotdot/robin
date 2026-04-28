@@ -11,7 +11,13 @@
  */
 
 export interface ScheduledMatch {
-  round: number;          // 1-based
+  round: number;          // 1-based — the SUB-ROUND number (after court splitting)
+  /** The original Berger round before any court-driven splitting. When the
+   *  number of matches exceeds available courts, a single Berger round is
+   *  split into multiple sub-rounds; bergerRound lets the UI group them
+   *  visually so users see "round 1 (set 1 of 2)" rather than two
+   *  unrelated rounds. */
+  bergerRound: number;
   court: number;          // 1-based, cycles within a round
   sideA: string[];        // length 1 for singles, 2 for doubles
   sideB: string[];
@@ -83,7 +89,7 @@ function assignCourts<
   numCourts: number,
   avoidBackToBack: boolean = false,
   avoidRecentMatchups: boolean = false
-): (T & { court: number; round: number })[] {
+): (T & { court: number; round: number; bergerRound: number })[] {
   // Each Berger round has N/2 matches (N = padded player count). When that
   // count exceeds numCourts, we split the round into multiple "sub-rounds"
   // so every output round respects the court limit AND no court number
@@ -104,7 +110,7 @@ function assignCourts<
   }
 
   const sortedOriginalRounds = Array.from(byRound.keys()).sort((a, b) => a - b);
-  const result: (T & { court: number; round: number })[] = [];
+  const result: (T & { court: number; round: number; bergerRound: number })[] = [];
   let nextRound = 1;
   const lastPlayedRound = new Map<string, number>();
   const lastPairRound = new Map<string, number>();
@@ -163,7 +169,15 @@ function assignCourts<
       }
 
       chunk.forEach((m, idx) => {
-        result.push({ ...m, round: nextRound, court: idx + 1 });
+        // Preserve the original (pre-split) Berger round so the UI can
+        // group sub-rounds together. m.round is already the Berger round
+        // at this point — `nextRound` is the post-split sub-round.
+        result.push({
+          ...m,
+          bergerRound: (m as unknown as { bergerRound?: number }).bergerRound ?? m.round,
+          round: nextRound,
+          court: idx + 1,
+        });
         for (const id of [...m.sideA, ...m.sideB]) {
           lastPlayedRound.set(id, nextRound);
         }

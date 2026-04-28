@@ -202,6 +202,7 @@ export async function submitWizard(s: WizardState): Promise<string> {
           side_a_player_ids: m.sideA,
           side_b_player_ids: m.sideB,
           status: "scheduled" as const,
+          group_label: String(m.bergerRound),
         }));
         const { error: insMatchErr } = await supabase
           .from("rr_matches")
