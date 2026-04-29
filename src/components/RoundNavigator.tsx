@@ -267,7 +267,7 @@ function RoundChipStrip({
         ref={stripRef}
         role="tablist"
         aria-label="Round timeline"
-        className="flex items-center gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:thin] md:px-6"
+        className="flex items-center gap-1.5 overflow-x-auto overflow-y-hidden px-4 py-2 [scrollbar-width:thin] md:px-6"
       >
         {Array.from({ length: total }, (_, i) => {
           const round = i + 1;
