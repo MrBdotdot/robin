@@ -22,6 +22,12 @@ dist
 dist-ssr
 *.local
 
+# tsc -b incremental cache (regenerated on every typecheck)
+*.tsbuildinfo
+
+# Claude Code session state
+.claude/
+
 # Dependencies
 node_modules
 
