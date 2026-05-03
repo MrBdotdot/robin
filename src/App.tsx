@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { PasswordGate } from "@/components/PasswordGate";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
+import Dashboard from "@/pages/Dashboard";
 import EventsList from "@/pages/EventsList";
 import EventCreate from "@/pages/EventCreate";
 import EventDetail from "@/pages/EventDetail";
@@ -18,7 +19,7 @@ export default function App() {
       <PasswordGate>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<Navigate to="/events" replace />} />
+            <Route index element={<Dashboard />} />
             <Route path="/events" element={<EventsList />} />
             <Route path="/events/new" element={<EventCreate />} />
             <Route path="/events/:id" element={<EventDetail />} />
@@ -28,7 +29,7 @@ export default function App() {
             <Route path="/series" element={<SeriesList />} />
             <Route path="/series/:id" element={<SeriesDetail />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/events" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </PasswordGate>
