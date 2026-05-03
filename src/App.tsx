@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { PasswordGate } from "@/components/PasswordGate";
+import { AuthGate } from "@/components/AuthGate";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/toaster";
 import Dashboard from "@/pages/Dashboard";
@@ -16,7 +16,7 @@ import Settings from "@/pages/Settings";
 export default function App() {
   return (
     <BrowserRouter>
-      <PasswordGate>
+      <AuthGate>
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
@@ -32,7 +32,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
-      </PasswordGate>
+      </AuthGate>
       <Toaster />
     </BrowserRouter>
   );

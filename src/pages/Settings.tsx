@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Lock,
   LogOut,
   Moon,
   Sun,
@@ -9,21 +8,26 @@ import {
   Loader2,
   Sparkles,
   Download,
+  UserCircle2,
 } from "lucide-react";
 import { downloadJson } from "@/lib/export";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
-import { lock } from "@/lib/auth";
+import { signOut, useSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 const DARK_KEY = "rr_theme_dark";
 
 export default function Settings() {
+  const session = useSession();
+  const email =
+    session && session !== "loading" ? session.user.email ?? null : null;
   const [dark, setDark] = useState<boolean>(false);
   const [wiping, setWiping] = useState(false);
   const [confirmingWipe, setConfirmingWipe] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Initialize dark mode from storage
   useEffect(() => {
@@ -91,10 +95,18 @@ export default function Settings() {
     }
   };
 
-  const handleLock = () => {
-    lock();
-    // Force a reload so the password gate kicks back in
-    window.location.reload();
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      // AuthGate will re-render the sign-in form via the auth state listener.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Couldn't sign out", { description: msg });
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const handleWipe = async () => {
@@ -151,21 +163,29 @@ export default function Settings() {
           </div>
         </Card>
 
-        {/* Lock */}
+        {/* Account */}
         <Card className="p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Lock className="h-4 w-4" />
-                Lock app
+                <UserCircle2 className="h-4 w-4" />
+                Account
               </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Sign out of this device. You'll need to enter the password again.
+              <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                {email ?? "Not signed in"}
               </p>
             </div>
-            <Button variant="outline" onClick={handleLock}>
-              <LogOut className="h-4 w-4" />
-              Lock
+            <Button
+              variant="outline"
+              onClick={handleSignOut}
+              disabled={signingOut || !email}
+            >
+              {signingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              Sign out
             </Button>
           </div>
         </Card>

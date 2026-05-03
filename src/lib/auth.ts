@@ -1,40 +1,56 @@
+import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./supabase";
+
 /**
- * Tiny password gate. The expected password is read from VITE_APP_PASSWORD
- * (defaults to "415" for testing). Once the user enters it correctly, we
- * stash a flag in sessionStorage so we don't pester them every page load.
+ * Thin wrappers around supabase.auth for email + password accounts.
  *
- * This is testing-grade auth. The real access control before going public
- * should be Supabase Auth + RLS policies tied to authenticated users.
+ * Note: this gates the app at the UI layer only. Anyone with a Supabase
+ * Auth user can still read/write every rr_* table because RLS hasn't
+ * been tightened yet. The full owner-scoped + invite + claim plan lives
+ * in AUTH_PLAN.md.
  */
 
-const STORAGE_KEY = "rr_unlocked";
-const EXPECTED = (import.meta.env.VITE_APP_PASSWORD as string | undefined) ?? "415";
+type SessionState = Session | null | "loading";
 
-export function isUnlocked(): boolean {
-  try {
-    return sessionStorage.getItem(STORAGE_KEY) === "1";
-  } catch {
-    // Private mode / storage disabled — fall back to "not unlocked"
-    return false;
-  }
+/**
+ * Subscribes to the current Supabase auth session. Returns "loading"
+ * during the initial fetch so the gate can avoid a flash of the sign-in
+ * form for already-signed-in users.
+ */
+export function useSession(): SessionState {
+  const [session, setSession] = useState<SessionState>("loading");
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setSession(data.session);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (active) setSession(s);
+    });
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  return session;
 }
 
-export function tryUnlock(input: string): boolean {
-  if (input.trim() === EXPECTED) {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      // ignore — they'll just have to re-enter on each page load
-    }
-    return true;
-  }
-  return false;
+export async function signIn(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
 }
 
-export function lock(): void {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+export async function signUp(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+}
+
+export async function signOut(): Promise<void> {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
 }
