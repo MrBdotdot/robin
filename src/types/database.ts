@@ -97,6 +97,44 @@ export interface Series {
   created_at: string;
 }
 
+/**
+ * Per-series Glicko rating row. One per (player, series). When an event
+ * is part of a series, results from that event update this row in
+ * addition to the player's global rating on rr_players.
+ */
+export interface SeriesRating {
+  id: string;
+  player_id: string;
+  series_id: string;
+  glicko_singles_rating: number;
+  glicko_singles_rd: number;
+  glicko_singles_vol: number;
+  glicko_doubles_rating: number;
+  glicko_doubles_rd: number;
+  glicko_doubles_vol: number;
+  matches_played: number;
+  last_played_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Concrete shape of the JSON stored in rr_event_players.initial_rating_snapshot.
+ * `global` is always present; `series` is populated only when the event has a
+ * series_id. The replay engine in liveRatings.ts uses these as the starting
+ * Glicko states for global and series live recomputation respectively.
+ */
+export interface InitialRatingSnapshot {
+  global: {
+    singles: { rating: number; rd: number; vol: number };
+    doubles: { rating: number; rd: number; vol: number };
+  };
+  series?: {
+    singles: { rating: number; rd: number; vol: number };
+    doubles: { rating: number; rd: number; vol: number };
+  } | null;
+}
+
 export interface EventPlayer {
   id: string;
   event_id: string;
@@ -186,6 +224,15 @@ export type Database = {
         Row: Series;
         Insert: Partial<Series> & { name: string };
         Update: Partial<Series>;
+        Relationships: [];
+      };
+      rr_series_ratings: {
+        Row: SeriesRating;
+        Insert: Partial<SeriesRating> & {
+          player_id: string;
+          series_id: string;
+        };
+        Update: Partial<SeriesRating>;
         Relationships: [];
       };
     };

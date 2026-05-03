@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Check, Loader2, Plus, Repeat, Search } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { buildSnapshot, loadSeriesRatings, seedSeriesFromPlayer } from "@/lib/seriesRatings";
 import type { EventPlayer, MatchRow, Player } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ interface PlayerSwapSheetProps {
   fromPlayerId: string | null;
   /** Event id — needed when swapping in a player who isn't on the roster yet. */
   eventId: string;
+  /** Series id when the event belongs to a series; null otherwise. */
+  seriesId: string | null;
   eventPlayers: EventPlayer[];
   matches: MatchRow[];
   playersById: Record<string, Player>;
@@ -35,6 +38,7 @@ export function PlayerSwapSheet({
   onClose,
   fromPlayerId,
   eventId,
+  seriesId,
   eventPlayers,
   matches,
   playersById,
@@ -151,20 +155,16 @@ export function PlayerSwapSheet({
               .single();
             return data as Player | null;
           })());
-        const snapshot = player
-          ? {
-              singles: {
-                rating: player.glicko_singles_rating,
-                rd: player.glicko_singles_rd,
-                vol: player.glicko_singles_vol,
-              },
-              doubles: {
-                rating: player.glicko_doubles_rating,
-                rd: player.glicko_doubles_rd,
-                vol: player.glicko_doubles_vol,
-              },
-            }
-          : null;
+        let snapshot = null as ReturnType<typeof buildSnapshot> | null;
+        if (player) {
+          let seriesRating = null;
+          if (seriesId) {
+            const existing = await loadSeriesRatings(seriesId, [player.id]);
+            seriesRating =
+              existing.get(player.id) ?? seedSeriesFromPlayer(player);
+          }
+          snapshot = buildSnapshot(player, seriesRating);
+        }
         const { error: epErr } = await supabase
           .from("rr_event_players")
           .insert({

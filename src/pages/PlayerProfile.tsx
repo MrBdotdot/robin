@@ -15,6 +15,8 @@ import type {
   EventRow,
   MatchRow,
   Player,
+  Series,
+  SeriesRating,
 } from "@/types/database";
 import { computePlayerStats, formatRecord } from "@/lib/stats";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,9 @@ export default function PlayerProfile() {
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [opponentLookup, setOpponentLookup] = useState<Record<string, Player>>({});
   const [ratingHistory, setRatingHistory] = useState<RatingHistoryRow[]>([]);
+  const [seriesRatings, setSeriesRatings] = useState<
+    Array<{ rating: SeriesRating; series: Series }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -134,6 +139,28 @@ export default function PlayerProfile() {
       .order("recorded_at", { ascending: true });
     setRatingHistory((rh ?? []) as RatingHistoryRow[]);
 
+    // Per-series ratings — combined with their series rows for display
+    const { data: srRows } = await supabase
+      .from("rr_series_ratings")
+      .select("*")
+      .eq("player_id", id);
+    const seriesIds = (srRows ?? []).map(
+      (r: { series_id: string }) => r.series_id
+    );
+    let seriesById: Record<string, Series> = {};
+    if (seriesIds.length > 0) {
+      const { data: sList } = await supabase
+        .from("rr_series")
+        .select("*")
+        .in("id", seriesIds);
+      for (const s of (sList ?? []) as Series[]) seriesById[s.id] = s;
+    }
+    setSeriesRatings(
+      ((srRows ?? []) as SeriesRating[])
+        .filter((r) => seriesById[r.series_id])
+        .map((r) => ({ rating: r, series: seriesById[r.series_id] }))
+    );
+
     setLoading(false);
   };
 
@@ -152,6 +179,31 @@ export default function PlayerProfile() {
     for (const e of events) map[e.id] = e;
     return map;
   }, [events]);
+
+  /**
+   * Per-(series, mode) completed match count for this player. Drives:
+   *  - whether to render the singles / doubles half of a series card
+   *  - the "—" placeholder for default-seeded modes (so a fresh
+   *    player who's only ever played doubles in a series doesn't see
+   *    a stale 1500 in the singles slot).
+   */
+  const seriesMatchCounts = useMemo(() => {
+    const counts = new Map<
+      string,
+      { singles: number; doubles: number }
+    >();
+    for (const m of matches) {
+      if (m.status !== "completed" || !m.winner_side) continue;
+      const ev = eventsById[m.event_id];
+      if (!ev || !ev.series_id) continue;
+      const mode: "singles" | "doubles" =
+        ev.mode === "singles" ? "singles" : "doubles";
+      const cur = counts.get(ev.series_id) ?? { singles: 0, doubles: 0 };
+      cur[mode] += 1;
+      counts.set(ev.series_id, cur);
+    }
+    return counts;
+  }, [matches, eventsById]);
 
   if (loading) {
     return (
@@ -299,6 +351,72 @@ export default function PlayerProfile() {
           }
         />
       </div>
+
+      {/* Per-series ratings */}
+      {seriesRatings.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Series ratings
+          </h2>
+          <div className="-mx-4 overflow-x-auto px-4 md:-mx-6 md:px-6">
+            <div className="flex gap-3 pb-1">
+              {seriesRatings.map(({ rating, series }) => {
+                const counts = seriesMatchCounts.get(series.id) ?? {
+                  singles: 0,
+                  doubles: 0,
+                };
+                const total = counts.singles + counts.doubles;
+                // If this player has zero completed matches in either mode
+                // in this series we still want to show the card (the
+                // rating row exists), but with everything as "—" so they
+                // don't read default-seeded numbers as real.
+                return (
+                  <Link
+                    key={rating.id}
+                    to={`/series/${series.id}`}
+                    className="group min-w-[180px] shrink-0 rounded-lg border bg-card p-3 transition-colors hover:bg-accent/40"
+                  >
+                    <p className="mb-1 truncate text-sm font-medium group-hover:underline">
+                      {series.name}
+                    </p>
+                    <div
+                      className={cn(
+                        "grid gap-2 text-xs",
+                        counts.singles > 0 && counts.doubles > 0
+                          ? "grid-cols-2"
+                          : "grid-cols-1"
+                      )}
+                    >
+                      {counts.singles > 0 && (
+                        <SeriesCardSide
+                          label="Singles"
+                          rating={rating.glicko_singles_rating}
+                          rd={rating.glicko_singles_rd}
+                        />
+                      )}
+                      {counts.doubles > 0 && (
+                        <SeriesCardSide
+                          label="Doubles"
+                          rating={rating.glicko_doubles_rating}
+                          rd={rating.glicko_doubles_rd}
+                        />
+                      )}
+                      {counts.singles === 0 && counts.doubles === 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          No matches yet
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[10px] text-muted-foreground">
+                      {total} match{total === 1 ? "" : "es"} in this series
+                    </p>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
@@ -563,6 +681,36 @@ function RatingCard({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One side (singles / doubles) of a player's per-series rating card.
+ * Shows rating + RD so a high-RD seed reads as provisional.
+ */
+function SeriesCardSide({
+  label,
+  rating,
+  rd,
+}: {
+  label: string;
+  rating: number;
+  rd: number;
+}) {
+  return (
+    <span>
+      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex items-baseline gap-1">
+        <span className="text-base font-semibold tabular-nums">
+          {Math.round(rating)}
+        </span>
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          ± {Math.round(rd)}
+        </span>
+      </span>
+    </span>
   );
 }
 

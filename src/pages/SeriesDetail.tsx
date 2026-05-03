@@ -14,6 +14,7 @@ import type {
   MatchRow,
   Player,
   Series,
+  SeriesRating,
 } from "@/types/database";
 import { computeStandings, type Tiebreaker } from "@/lib/standings";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ import { AssignEventsSheet } from "@/components/AssignEventsSheet";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
-type TabKey = "standings" | "events";
+type TabKey = "standings" | "ratings" | "events";
 
 interface AggregatedRow {
   playerId: string;
@@ -44,8 +45,9 @@ export default function SeriesDetail() {
   const [players, setPlayers] = useState<Record<string, Player>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>("standings");
+  const [tab, setTab] = useState<TabKey>("events");
   const [assigning, setAssigning] = useState(false);
+  const [seriesRatings, setSeriesRatings] = useState<SeriesRating[]>([]);
 
   const load = async () => {
     if (!id) return;
@@ -106,6 +108,13 @@ export default function SeriesDetail() {
       setPlayers({});
     }
 
+    // Load per-series ratings for the leaderboard tab
+    const { data: srs } = await supabase
+      .from("rr_series_ratings")
+      .select("*")
+      .eq("series_id", id);
+    setSeriesRatings((srs ?? []) as SeriesRating[]);
+
     setLoading(false);
   };
 
@@ -113,6 +122,54 @@ export default function SeriesDetail() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  /**
+   * Per-mode match counts for the series. Two layers:
+   *  - seriesHasMode: does this series have ANY completed singles /
+   *    doubles matches? Drives whether we render the column at all.
+   *  - perPlayerCounts: per-(player, mode) completed match count.
+   *    Drives the "—" fallback for individual rows where a player has
+   *    a default-seeded rating because they've never played that mode
+   *    in this series.
+   *
+   * Computed from already-loaded `events` + `matches` — no extra query.
+   */
+  const matchCounts = useMemo(() => {
+    const eventModeById = new Map<string, "singles" | "doubles">();
+    for (const e of events) {
+      eventModeById.set(e.id, e.mode === "singles" ? "singles" : "doubles");
+    }
+    const seriesHasMode = { singles: 0, doubles: 0 };
+    const perPlayer = new Map<
+      string,
+      { singles: number; doubles: number }
+    >();
+    const bump = (id: string, mode: "singles" | "doubles") => {
+      const cur = perPlayer.get(id) ?? { singles: 0, doubles: 0 };
+      cur[mode] += 1;
+      perPlayer.set(id, cur);
+    };
+    for (const m of matches) {
+      if (m.status !== "completed" || !m.winner_side) continue;
+      const mode = eventModeById.get(m.event_id);
+      if (!mode) continue;
+      seriesHasMode[mode] += 1;
+      for (const id of m.side_a_player_ids) bump(id, mode);
+      for (const id of m.side_b_player_ids) bump(id, mode);
+    }
+    return {
+      hasSingles: seriesHasMode.singles > 0,
+      hasDoubles: seriesHasMode.doubles > 0,
+      // Mode with the most completed matches in this series, used as the
+      // primary sort key for the leaderboard. If neither, defaults to
+      // doubles (the empty-state path renders before this is read).
+      primaryMode:
+        seriesHasMode.doubles >= seriesHasMode.singles
+          ? ("doubles" as const)
+          : ("singles" as const),
+      perPlayer,
+    };
+  }, [events, matches]);
 
   // Aggregate per-player stats across every event in the series
   const aggregated = useMemo(() => {
@@ -237,11 +294,14 @@ export default function SeriesDetail() {
       </header>
 
       <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
+        <TabButton active={tab === "events"} onClick={() => setTab("events")}>
+          Events
+        </TabButton>
         <TabButton active={tab === "standings"} onClick={() => setTab("standings")}>
           Cumulative standings
         </TabButton>
-        <TabButton active={tab === "events"} onClick={() => setTab("events")}>
-          Events
+        <TabButton active={tab === "ratings"} onClick={() => setTab("ratings")}>
+          Ratings
         </TabButton>
       </div>
 
@@ -291,6 +351,99 @@ export default function SeriesDetail() {
               })}
             </ul>
           )}
+        </Card>
+      )}
+
+      {tab === "ratings" && (
+        <Card className="overflow-hidden">
+          {seriesRatings.length === 0 ||
+          (!matchCounts.hasSingles && !matchCounts.hasDoubles) ? (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+              No ratings yet — ratings appear here once players complete matches in this series.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {/* Sort by whichever mode the series uses most. Ties
+                  broken by the other mode's rating. */}
+              {[...seriesRatings]
+                .sort((a, b) => {
+                  const primary = matchCounts.primaryMode;
+                  const secondary =
+                    primary === "doubles" ? "singles" : "doubles";
+                  const ap =
+                    primary === "doubles"
+                      ? a.glicko_doubles_rating
+                      : a.glicko_singles_rating;
+                  const bp =
+                    primary === "doubles"
+                      ? b.glicko_doubles_rating
+                      : b.glicko_singles_rating;
+                  if (bp !== ap) return bp - ap;
+                  const as =
+                    secondary === "doubles"
+                      ? a.glicko_doubles_rating
+                      : a.glicko_singles_rating;
+                  const bs =
+                    secondary === "doubles"
+                      ? b.glicko_doubles_rating
+                      : b.glicko_singles_rating;
+                  return bs - as;
+                })
+                .map((sr, idx) => {
+                  const p = players[sr.player_id];
+                  const counts = matchCounts.perPlayer.get(sr.player_id) ?? {
+                    singles: 0,
+                    doubles: 0,
+                  };
+                  return (
+                    <li
+                      key={sr.id}
+                      className="flex items-center justify-between gap-3 px-5 py-3"
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="text-sm font-semibold tabular-nums">
+                          #{idx + 1}
+                        </span>
+                        <span className="min-w-0">
+                          <Link
+                            to={`/players/${sr.player_id}`}
+                            className="block truncate text-sm font-medium hover:underline"
+                          >
+                            {p?.full_name ?? "Unknown"}
+                          </Link>
+                          <span className="block text-xs text-muted-foreground">
+                            {sr.matches_played} match
+                            {sr.matches_played === 1 ? "" : "es"} in this series
+                          </span>
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-4 text-right text-xs tabular-nums">
+                        {matchCounts.hasSingles && (
+                          <RatingPill
+                            label="Singles"
+                            rating={sr.glicko_singles_rating}
+                            rd={sr.glicko_singles_rd}
+                            played={counts.singles}
+                          />
+                        )}
+                        {matchCounts.hasDoubles && (
+                          <RatingPill
+                            label="Doubles"
+                            rating={sr.glicko_doubles_rating}
+                            rd={sr.glicko_doubles_rd}
+                            played={counts.doubles}
+                          />
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+          <p className="border-t bg-muted/30 px-5 py-2 text-[11px] text-muted-foreground">
+            These ratings only reflect matches played within this series.
+            Each player’s global rating may be different.
+          </p>
         </Card>
       )}
 
@@ -375,5 +528,45 @@ function TabButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * One side's rating in the series leaderboard. Renders "—" when the
+ * player has 0 matches in this mode in the series, signalling that the
+ * displayed rating is just a default seed (or seed-from-global) and
+ * shouldn't be read as a real rating.
+ */
+function RatingPill({
+  label,
+  rating,
+  rd,
+  played,
+}: {
+  label: string;
+  rating: number;
+  rd: number;
+  played: number;
+}) {
+  return (
+    <span title={`Series ${label.toLowerCase()} rating`}>
+      <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      {played === 0 ? (
+        <span className="block text-sm font-semibold text-muted-foreground/70">
+          —
+        </span>
+      ) : (
+        <span className="block">
+          <span className="text-sm font-semibold">
+            {Math.round(rating)}
+          </span>
+          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+            ± {Math.round(rd)}
+          </span>
+        </span>
+      )}
+    </span>
   );
 }

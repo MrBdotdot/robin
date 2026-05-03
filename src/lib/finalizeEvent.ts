@@ -121,8 +121,8 @@ export async function finalizeEvent(eventId: string): Promise<FinalizeResult> {
     const p = playersById[ep.player_id];
     if (!p) continue;
     const snap = ep.initial_rating_snapshot as RatingSnapshot | null;
-    if (!snap) continue;
-    const before = isDoubles ? snap.doubles : snap.singles;
+    if (!snap || !snap.global) continue;
+    const before = isDoubles ? snap.global.doubles : snap.global.singles;
     const after: Rating = isDoubles
       ? {
           rating: p.glicko_doubles_rating,

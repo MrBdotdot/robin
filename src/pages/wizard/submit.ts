@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { generateScheduleForMode } from "@/lib/scheduler";
+import { buildSnapshot, seedSeriesFromPlayer, loadSeriesRatings } from "@/lib/seriesRatings";
+import type { Player } from "@/types/database";
 import type { EventConfig, ScoringTemplate } from "@/types/database";
 import type { WizardState } from "./types";
 
@@ -152,22 +154,24 @@ export async function submitWizard(s: WizardState): Promise<string> {
       .filter(Boolean) as string[];
 
     // 3. event_player rows with rating snapshots
+    // Series-bound? Load existing per-series ratings for these players;
+    // any without one will get seeded from their global rating.
+    const seriesId = (eventRow as { series_id: string | null }).series_id;
+    const seriesRatings = seriesId
+      ? await loadSeriesRatings(seriesId, playerIds)
+      : new Map();
+
     const rows = playerIds.map((player_id, idx) => {
       const fromName = orderedNames[idx];
       const found = existingMap.get(fromName);
       const snapshot = found
-        ? {
-            singles: {
-              rating: found.glicko_singles_rating,
-              rd: found.glicko_singles_rd,
-              vol: found.glicko_singles_vol,
-            },
-            doubles: {
-              rating: found.glicko_doubles_rating,
-              rd: found.glicko_doubles_rd,
-              vol: found.glicko_doubles_vol,
-            },
-          }
+        ? buildSnapshot(
+            found as unknown as Player,
+            seriesId
+              ? seriesRatings.get(player_id) ??
+                  seedSeriesFromPlayer(found as unknown as Player)
+              : null
+          )
         : null;
       return {
         event_id: eventRow.id,

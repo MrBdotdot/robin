@@ -941,6 +941,7 @@ export default function EventDetail() {
         onClose={() => setAddingPlayer(false)}
         eventId={event.id}
         eventMode={event.mode}
+        seriesId={event.series_id}
         hasSchedule={matches.length > 0}
         existingPlayerIds={eventPlayers.map((ep) => ep.player_id)}
         liveRound={liveRound}
@@ -970,6 +971,7 @@ export default function EventDetail() {
         onClose={() => setSwappingPlayerId(null)}
         fromPlayerId={swappingPlayerId}
         eventId={event.id}
+        seriesId={event.series_id}
         eventPlayers={eventPlayers}
         matches={matches}
         playersById={playersById}

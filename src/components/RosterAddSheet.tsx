@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
+import { buildSnapshot, loadSeriesRatings, seedSeriesFromPlayer } from "@/lib/seriesRatings";
 import type { EventMode, Player } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,9 @@ interface RosterAddSheetProps {
   onClose: () => void;
   eventId: string;
   eventMode: EventMode;
+  /** Series id when the event belongs to a series; null otherwise. Used
+   *  to seed per-series rating snapshots. */
+  seriesId: string | null;
   hasSchedule: boolean;
   /** Player IDs already in the event roster — they'll be greyed out. */
   existingPlayerIds: string[];
@@ -33,6 +37,7 @@ export function RosterAddSheet({
   onClose,
   eventId,
   eventMode,
+  seriesId,
   hasSchedule,
   existingPlayerIds,
   liveRound,
@@ -142,21 +147,20 @@ export function RosterAddSheet({
         .in("id", allIds);
       const snapBy = new Map((snapPlayers ?? []).map((p) => [p.id, p]));
 
+      // Pull existing per-series ratings if this event belongs to a series
+      const seriesRatings = seriesId
+        ? await loadSeriesRatings(seriesId, allIds)
+        : new Map();
+
       const rows = allIds.map((player_id) => {
-        const p = snapBy.get(player_id);
+        const p = snapBy.get(player_id) as unknown as Player | undefined;
         const snapshot = p
-          ? {
-              singles: {
-                rating: p.glicko_singles_rating,
-                rd: p.glicko_singles_rd,
-                vol: p.glicko_singles_vol,
-              },
-              doubles: {
-                rating: p.glicko_doubles_rating,
-                rd: p.glicko_doubles_rd,
-                vol: p.glicko_doubles_vol,
-              },
-            }
+          ? buildSnapshot(
+              p,
+              seriesId
+                ? seriesRatings.get(player_id) ?? seedSeriesFromPlayer(p)
+                : null
+            )
           : null;
         return {
           event_id: eventId,

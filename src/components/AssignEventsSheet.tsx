@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import type { EventRow } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { cn, formatDate } from "@/lib/utils";
+import { backfillCompletedEventSeriesRatings } from "@/lib/liveRatings";
 
 interface AssignEventsSheetProps {
   open: boolean;
@@ -63,14 +64,19 @@ export function AssignEventsSheet({
     });
   };
 
-  const { toAdd, toRemove } = useMemo(() => {
+  const { toAdd, toRemove, completedToAdd } = useMemo(() => {
     const assigned = new Set(assignedEventIds);
     const adds: string[] = [];
     const removes: string[] = [];
     for (const id of picked) if (!assigned.has(id)) adds.push(id);
     for (const id of assignedEventIds) if (!picked.has(id)) removes.push(id);
-    return { toAdd: adds, toRemove: removes };
-  }, [picked, assignedEventIds]);
+    const eventsById = new Map((events ?? []).map((e) => [e.id, e]));
+    const completed = adds.filter((id) => {
+      const e = eventsById.get(id);
+      return e && (e.status === "completed" || e.status === "archived");
+    });
+    return { toAdd: adds, toRemove: removes, completedToAdd: completed };
+  }, [picked, assignedEventIds, events]);
 
   const handleSave = async () => {
     if (saving) return;
@@ -98,6 +104,14 @@ export function AssignEventsSheet({
         if (r && typeof r === "object" && "error" in r && r.error) {
           throw new Error(String((r.error as { message?: string }).message ?? r.error));
         }
+      }
+      // Backfill series ratings for any completed events we just added.
+      // recomputeLiveRatings early-returns on completed/archived, so without
+      // this step their matches wouldn't show up in the series leaderboard.
+      if (completedToAdd.length > 0) {
+        await Promise.all(
+          completedToAdd.map((id) => backfillCompletedEventSeriesRatings(id))
+        );
       }
       toast.success("Series updated", {
         description:
@@ -169,6 +183,16 @@ export function AssignEventsSheet({
         <p className="rounded-md border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           No standalone events to assign. Events in other series aren't shown — open them and re-assign from the event's edit sheet.
         </p>
+      )}
+
+      {completedToAdd.length > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            {completedToAdd.length === 1 ? "1 completed event" : `${completedToAdd.length} completed events`}
+            {" "}will join the series. Their matches will count toward series totals, but ratings can't be retroactively rebuilt in chronological order — players new to this series get a fresh series rating from these matches; players already in the series keep their existing rating.
+          </span>
+        </div>
       )}
 
       {events && events.length > 0 && (
