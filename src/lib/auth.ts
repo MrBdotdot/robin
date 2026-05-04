@@ -3,21 +3,18 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
 /**
- * Thin wrappers around supabase.auth for email + password accounts.
+ * Magic-link auth wrappers. Phase 2: replaces email/password.
  *
- * Note: this gates the app at the UI layer only. Anyone with a Supabase
- * Auth user can still read/write every rr_* table because RLS hasn't
- * been tightened yet. The full owner-scoped + invite + claim plan lives
- * in AUTH_PLAN.md.
+ * Sign-in flow:
+ *   1. User enters email, app calls signInWithMagicLink().
+ *   2. Supabase emails them a one-time link.
+ *   3. They click; the app loads with a session in the URL hash.
+ *   4. supabase-js detects the session and fires onAuthStateChange.
+ *   5. AuthGate's session subscription updates and renders children.
  */
 
 type SessionState = Session | null | "loading";
 
-/**
- * Subscribes to the current Supabase auth session. Returns "loading"
- * during the initial fetch so the gate can avoid a flash of the sign-in
- * form for already-signed-in users.
- */
 export function useSession(): SessionState {
   const [session, setSession] = useState<SessionState>("loading");
 
@@ -40,13 +37,14 @@ export function useSession(): SessionState {
   return session;
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-}
-
-export async function signUp(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signUp({ email, password });
+export async function signInWithMagicLink(email: string, redirectTo?: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+      emailRedirectTo: redirectTo ?? window.location.origin,
+    },
+  });
   if (error) throw error;
 }
 

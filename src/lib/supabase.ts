@@ -16,7 +16,8 @@ if (!url || !key) {
 // via explicit `as` casts and the local TypeScript types in `@/types/database`.
 export const supabase: SupabaseClient = createClient(url, key, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
 });
