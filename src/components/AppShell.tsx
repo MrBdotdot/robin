@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
+import { useMembership } from "@/lib/membership";
+import { isAdmin } from "@/lib/permissions";
+import { AvatarMenu } from "@/components/AvatarMenu";
 
 const PRIMARY_NAV = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -28,6 +31,16 @@ export function AppShell() {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const { membership } = useMembership();
+  const showAdminNav = isAdmin(membership);
+
+  const primaryNav = showAdminNav
+    ? PRIMARY_NAV
+    : [{ to: "/me", label: "Home", icon: Home, end: true } as const];
+  const secondaryNav = showAdminNav
+    ? SECONDARY_NAV
+    : [{ to: "/settings", label: "Settings", icon: Settings } as const];
 
   useEffect(() => {
     if (!popoverOpen) return;
@@ -50,13 +63,14 @@ export function AppShell() {
   return (
     <div className="flex min-h-full flex-col md:flex-row">
       <aside className="hidden border-r bg-card md:flex md:w-56 md:flex-col">
-        <div className="flex h-14 items-center border-b px-5">
+        <div className="flex h-14 items-center justify-between border-b px-5">
           <span className="font-display text-lg uppercase tracking-tight">
             Round Robin
           </span>
+          <AvatarMenu />
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {PRIMARY_NAV.map(({ to, label, icon: Icon, end }) => (
+          {primaryNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -96,7 +110,7 @@ export function AppShell() {
               role="menu"
               className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-md border bg-card shadow-lg"
             >
-              {SECONDARY_NAV.map(({ to, label, icon: Icon }) => (
+              {secondaryNav.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}
@@ -119,10 +133,11 @@ export function AppShell() {
         </div>
       </aside>
 
-      <header className="flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
+      <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
         <span className="font-display text-base uppercase tracking-tight">
           Round Robin
         </span>
+        <AvatarMenu />
       </header>
 
       <main className={cn("flex-1 overflow-y-auto", "pb-20 md:pb-0")}>
@@ -135,7 +150,7 @@ export function AppShell() {
           "pb-[max(0.25rem,env(safe-area-inset-bottom))]"
         )}
       >
-        {PRIMARY_NAV.map(({ to, label, icon: Icon, end }) => (
+        {primaryNav.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -166,7 +181,7 @@ export function AppShell() {
 
       <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="More">
         <ul className="-mx-2 flex flex-col">
-          {SECONDARY_NAV.map(({ to, label, icon: Icon }) => (
+          {secondaryNav.map(({ to, label, icon: Icon }) => (
             <li key={to}>
               <NavLink
                 to={to}
