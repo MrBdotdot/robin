@@ -40,6 +40,9 @@ import { recomputeLiveRatings } from "@/lib/liveRatings";
 import type { ScoringTemplate } from "@/types/database";
 import { computeStandings, type Tiebreaker } from "@/lib/standings";
 import { regenerateFutureSchedule, appendOneRotation } from "@/lib/scheduleSync";
+import { useMembership } from "@/lib/membership";
+import { canAssignScorekeepers } from "@/lib/permissions";
+import { AssignScorekeepersSheet } from "@/components/AssignScorekeepersSheet";
 
 type Tab = "schedule" | "standings" | "bracket" | "roster";
 
@@ -68,6 +71,8 @@ export default function EventDetail() {
   const [hoverEpId, setHoverEpId] = useState<string | null>(null);
   const [hoverEdge, setHoverEdge] = useState<"above" | "below" | null>(null);
   const [addingRounds, setAddingRounds] = useState(false);
+  const { membership } = useMembership();
+  const [scorekeepersOpen, setScorekeepersOpen] = useState(false);
 
   const loadAll = async () => {
     if (!id) return;
@@ -443,6 +448,24 @@ export default function EventDetail() {
           </p>
         </div>
       </header>
+
+      {canAssignScorekeepers(membership) && id && (
+        <section className="mb-4 rounded-md border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <Users className="h-4 w-4" /> Scorekeepers
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Assigned scorekeepers can enter scores on this event.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setScorekeepersOpen(true)}>
+              Manage
+            </Button>
+          </div>
+        </section>
+      )}
 
       <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
         <TabButton active={tab === "schedule"} onClick={() => setTab("schedule")}>
@@ -998,6 +1021,14 @@ export default function EventDetail() {
           />
         );
       })()}
+
+      {id && (
+        <AssignScorekeepersSheet
+          eventId={id}
+          open={scorekeepersOpen}
+          onOpenChange={setScorekeepersOpen}
+        />
+      )}
     </div>
   );
 }
