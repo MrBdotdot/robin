@@ -38,6 +38,10 @@ interface ScoreSheetProps {
    *  this match. The outgoing player ID is passed so the substitute sheet
    *  can skip the "who's leaving?" step. */
   onSubstituteClick?: (side: "a" | "b", outgoingPlayerId: string) => void;
+  /** When false, render the sheet read-only: hide save/clear/forfeit/play-now,
+   *  disable score inputs, and don't expose the substitute-player action.
+   *  Non-scorers can still open the sheet to view the score. Defaults to true. */
+  canScore?: boolean;
 }
 
 interface DraftScores {
@@ -147,6 +151,7 @@ export function ScoreSheet({
   allMatches,
   liveRound,
   onSubstituteClick,
+  canScore = true,
 }: ScoreSheetProps) {
   const [draft, setDraft] = useState<DraftScores>(() => emptyDraft(scoring));
   const [saving, setSaving] = useState(false);
@@ -381,7 +386,7 @@ export function ScoreSheet({
   }) => (
     <div className="flex items-center justify-between gap-2">
       {content}
-      {confirmingForfeit === null && (
+      {canScore && confirmingForfeit === null && (
         <button
           type="button"
           onClick={() => setConfirmingForfeit(side)}
@@ -410,7 +415,7 @@ export function ScoreSheet({
           : "Custom scoring"
       }
       footer={
-        confirmingForfeit !== null ? (
+        !canScore ? null : confirmingForfeit !== null ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
@@ -472,7 +477,7 @@ export function ScoreSheet({
         </div>
       ) : (
         <>
-          {isFutureScheduled && (
+          {canScore && isFutureScheduled && (
             <div
               className={cn(
                 "mb-4 flex flex-col gap-3 rounded-lg border p-3 text-sm sm:flex-row sm:items-center sm:justify-between",
@@ -509,6 +514,12 @@ export function ScoreSheet({
               </Button>
             </div>
           )}
+          {!canScore && (
+            <div className="mb-4 rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+              You don't have permission to enter scores on this event. An organizer can assign you as a scorekeeper.
+            </div>
+          )}
+          <fieldset disabled={!canScore} className={cn(!canScore && "opacity-90")}>
           {(() => {
             // Tappable player names — tap to open the substitute sheet for
             // exactly that player on exactly that side. We skip wiring up
@@ -520,7 +531,7 @@ export function ScoreSheet({
               <span className="inline-flex flex-wrap items-baseline gap-0.5">
                 {ids.map((id, i) => {
                   const name = playersById[id]?.full_name ?? "Unknown";
-                  const interactive = onSubstituteClick && !isCompleted;
+                  const interactive = canScore && onSubstituteClick && !isCompleted;
                   return (
                     <Fragment key={id}>
                       {i > 0 && (
@@ -597,6 +608,7 @@ export function ScoreSheet({
               </p>
             );
           })()}
+          </fieldset>
         </>
       )}
     </Sheet>

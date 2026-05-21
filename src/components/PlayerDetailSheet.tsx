@@ -35,6 +35,9 @@ interface PlayerDetailSheetProps {
   onChanged: () => Promise<void> | void;
   /** Optional: triggered when user wants to swap this player out for someone else. */
   onSwapClick?: (playerId: string) => void;
+  /** When false, hide all edit affordances (rename / swap / withdraw / remove).
+   *  Non-admins can still open the sheet to read stats. Defaults to true. */
+  canEdit?: boolean;
 }
 
 export function PlayerDetailSheet({
@@ -48,6 +51,7 @@ export function PlayerDetailSheet({
   liveRound,
   onChanged,
   onSwapClick,
+  canEdit = true,
 }: PlayerDetailSheetProps) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
@@ -174,7 +178,7 @@ export function PlayerDetailSheet({
           : seedAndStatusLine(eventPlayer)
       }
       footer={
-        eventCompleted ? null : confirmingDelete ? (
+        !canEdit ? null : eventCompleted ? null : confirmingDelete ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"

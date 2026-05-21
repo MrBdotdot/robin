@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase";
 import { cn, formatDate } from "@/lib/utils";
 import { generateScheduleForMode } from "@/lib/scheduler";
 import type {
+  EventCollaborator,
   EventConfig,
   EventPlayer,
   EventRow,
@@ -41,7 +42,8 @@ import type { ScoringTemplate } from "@/types/database";
 import { computeStandings, type Tiebreaker } from "@/lib/standings";
 import { regenerateFutureSchedule, appendOneRotation } from "@/lib/scheduleSync";
 import { useMembership } from "@/lib/membership";
-import { canAssignScorekeepers } from "@/lib/permissions";
+import { canAssignScorekeepers, canScoreEvent, canViewEditChrome } from "@/lib/permissions";
+import { useSession } from "@/lib/auth";
 import { AssignScorekeepersSheet } from "@/components/AssignScorekeepersSheet";
 
 type Tab = "schedule" | "standings" | "bracket" | "roster";
@@ -73,6 +75,21 @@ export default function EventDetail() {
   const [addingRounds, setAddingRounds] = useState(false);
   const { membership } = useMembership();
   const [scorekeepersOpen, setScorekeepersOpen] = useState(false);
+  const session = useSession();
+  const [eventCollabs, setEventCollabs] = useState<EventCollaborator[]>([]);
+
+  useEffect(() => {
+    if (!id) return;
+    supabase
+      .from("rr_event_collaborators")
+      .select("*")
+      .eq("event_id", id)
+      .then(({ data }) => setEventCollabs((data as EventCollaborator[]) ?? []));
+  }, [id]);
+
+  const userId = session && session !== "loading" ? session.user.id : "";
+  const showEditChrome = canViewEditChrome(membership);
+  const canScore = id ? canScoreEvent(membership, userId, id, eventCollabs) : false;
 
   const loadAll = async () => {
     if (!id) return;
@@ -395,18 +412,20 @@ export default function EventDetail() {
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <button
-            type="button"
-            onClick={() => setEditingEvent(true)}
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "ml-auto"
-            )}
-          >
-            <Pencil className="h-4 w-4" />
-            Edit
-          </button>
-          {event.status === "live" && (
+          {showEditChrome && (
+            <button
+              type="button"
+              onClick={() => setEditingEvent(true)}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "ml-auto"
+              )}
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </button>
+          )}
+          {showEditChrome && event.status === "live" && (
             <button
               type="button"
               onClick={() => setFinalizing(true)}
@@ -493,26 +512,30 @@ export default function EventDetail() {
               </div>
               <h2 className="text-lg font-semibold">No schedule yet</h2>
               <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                Generate the round-robin schedule based on the players you've added.
+                {showEditChrome
+                  ? "Generate the round-robin schedule based on the players you've added."
+                  : "An organizer hasn't generated the schedule yet. Check back soon."}
               </p>
-              <Button
-                size="lg"
-                className="mt-6"
-                onClick={handleGenerate}
-                disabled={generating}
-              >
-                {generating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating…
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" />
-                    Generate schedule
-                  </>
-                )}
-              </Button>
+              {showEditChrome && (
+                <Button
+                  size="lg"
+                  className="mt-6"
+                  onClick={handleGenerate}
+                  disabled={generating}
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Generate schedule
+                    </>
+                  )}
+                </Button>
+              )}
               <p className="mt-3 text-xs text-muted-foreground">
                 {eventPlayers.length}{" "}
                 {eventPlayers.length === 1 ? "player" : "players"} ready
@@ -546,7 +569,8 @@ export default function EventDetail() {
                   ))
                 )}
 
-                {event.status === "live" &&
+                {showEditChrome &&
+                  event.status === "live" &&
                   totalRounds > 0 &&
                   currentRound === totalRounds && (
                     <div className="rounded-lg border border-dashed bg-muted/20 p-3 text-sm">
@@ -680,7 +704,7 @@ export default function EventDetail() {
                   <p className="mt-2 max-w-sm text-sm text-muted-foreground">
                     Once enough round-robin matches are done, you can end group play and start the bracket.
                   </p>
-                  {event.status === "live" && (
+                  {showEditChrome && event.status === "live" && (
                     <Button
                       size="lg"
                       className="mt-6"
@@ -767,14 +791,16 @@ export default function EventDetail() {
                 {eventPlayers.length} player{eventPlayers.length === 1 ? "" : "s"}
                 {!reorderable && " · alphabetical"}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAddingPlayer(true)}
-              >
-                <UserPlus className="h-4 w-4" />
-                Add player
-              </Button>
+              {showEditChrome && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddingPlayer(true)}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add player
+                </Button>
+              )}
             </div>
             <Card className="overflow-hidden">
               {eventPlayers.length === 0 ? (
@@ -789,15 +815,15 @@ export default function EventDetail() {
                     return (
                     <li
                       key={ep.id}
-                      draggable={reorderable}
+                      draggable={reorderable && showEditChrome}
                       onDragStart={(e) => {
-                        if (!reorderable) return;
+                        if (!reorderable || !showEditChrome) return;
                         e.dataTransfer.effectAllowed = "move";
                         e.dataTransfer.setData("text/plain", ep.id);
                         setDraggingEpId(ep.id);
                       }}
                       onDragOver={(e) => {
-                        if (!reorderable || !draggingEpId) return;
+                        if (!reorderable || !showEditChrome || !draggingEpId) return;
                         if (draggingEpId === ep.id) return;
                         e.preventDefault();
                         e.dataTransfer.dropEffect = "move";
@@ -817,7 +843,7 @@ export default function EventDetail() {
                         }
                       }}
                       onDrop={(e) => {
-                        if (!reorderable || !draggingEpId) return;
+                        if (!reorderable || !showEditChrome || !draggingEpId) return;
                         e.preventDefault();
                         const fromIdx = sorted.findIndex(
                           (s) => s.ep.id === draggingEpId
@@ -846,7 +872,7 @@ export default function EventDetail() {
                         hoverState === "below" && "border-b-2 border-primary"
                       )}
                     >
-                      {reorderable && (
+                      {reorderable && showEditChrome && (
                         <span
                           className="cursor-grab touch-none rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing"
                           aria-hidden
@@ -879,12 +905,14 @@ export default function EventDetail() {
                           {ep.withdrawn && (
                             <Badge variant="forfeit">Withdrawn</Badge>
                           )}
-                          <span
-                            aria-hidden
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </span>
+                          {showEditChrome && (
+                            <span
+                              aria-hidden
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background text-muted-foreground transition-colors group-hover:bg-accent group-hover:text-foreground"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </span>
+                          )}
                         </span>
                       </button>
                     </li>
@@ -894,9 +922,13 @@ export default function EventDetail() {
               )}
             </Card>
             <p className="mt-3 text-xs text-muted-foreground">
-              {reorderable
-                ? "Drag the grip handle to reorder seeding. Higher in the list = top seed. Locked once any match is played."
-                : "Sorted alphabetically. Seeding is locked once any match has been played."}
+              {showEditChrome
+                ? reorderable
+                  ? "Drag the grip handle to reorder seeding. Higher in the list = top seed. Locked once any match is played."
+                  : "Sorted alphabetically. Seeding is locked once any match has been played."
+                : reorderable
+                ? "Seeded order. Higher in the list = top seed."
+                : "Sorted alphabetically."}
             </p>
           </>
         );
@@ -916,6 +948,7 @@ export default function EventDetail() {
             playersById={playersById}
             liveRound={liveRound}
             onChanged={loadAll}
+            canEdit={showEditChrome}
             onSwapClick={(pid) => {
               setOpenPlayerEpId(null);
               setSwappingPlayerId(pid);
@@ -936,6 +969,7 @@ export default function EventDetail() {
             onSaved={handleScoreSaved}
             allMatches={matches}
             liveRound={liveRound}
+            canScore={canScore}
             onSubstituteClick={(side, outgoingPlayerId) => {
               if (m) {
                 setSubbingMatchId(m.id);
