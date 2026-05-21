@@ -24,10 +24,10 @@ export function AssignScorekeepersSheet({ eventId, open, onOpenChange, onChange 
 
   const load = async () => {
     setLoading(true);
-    const { data: m, error: mErr } = await supabase
-      .from("rr_memberships_with_email")
-      .select("*")
-      .eq("role", "scorekeeper");
+    // list_scorekeepers_with_email() is a security-definer RPC that does an
+    // admin check inline (only admins receive rows). Replaces the previous
+    // rr_memberships_with_email view which exposed auth.users emails too broadly.
+    const { data: m, error: mErr } = await supabase.rpc("list_scorekeepers_with_email");
     const { data: c, error: cErr } = await supabase
       .from("rr_event_collaborators")
       .select("*")
