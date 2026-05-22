@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
 import type { Invite, Role } from "@/types/database";
@@ -118,14 +119,13 @@ export function InviteSheet({ open, onOpenChange }: Props) {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <select
-          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+        <Select
           value={role}
           onChange={(e) => setRole(e.target.value as Role)}
         >
           <option value="participant">Participant</option>
           <option value="organizer">Organizer</option>
-        </select>
+        </Select>
         <Button type="submit" disabled={submitting || !email} className="w-full">
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate invite"}
         </Button>
