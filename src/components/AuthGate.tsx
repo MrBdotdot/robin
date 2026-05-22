@@ -1,7 +1,6 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Loader2, Lock, Mail } from "lucide-react";
 import { signInWithMagicLink, useSession } from "@/lib/auth";
-import { bootstrapMembership } from "@/lib/membership";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,21 +15,14 @@ interface AuthGateProps {
   children: ReactNode;
 }
 
+// Bootstrap of the membership row now lives inside useMembership() — no
+// duplicate call needed here.
 export function AuthGate({ children }: AuthGateProps) {
   const session = useSession();
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
-
-  // Bootstrap the membership row on first sign-in. Idempotent.
-  useEffect(() => {
-    if (session && session !== "loading") {
-      bootstrapMembership().catch((e) => {
-        console.error("bootstrap_membership failed:", e);
-      });
-    }
-  }, [session]);
 
   if (session === "loading") {
     return (

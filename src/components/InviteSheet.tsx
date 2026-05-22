@@ -69,7 +69,11 @@ export function InviteSheet({ open, onOpenChange }: Props) {
       setRole("participant");
       await loadInvites();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not create invite");
+      const message =
+        err instanceof Error
+          ? err.message
+          : (err as { message?: string })?.message ?? "Could not create invite";
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }

@@ -23,7 +23,20 @@ const mockSession = (userId: string | null) => {
   });
 };
 
-const mockMembershipRow = (role: string | null) => {
+const mockBootstrap = (role: string | null) => {
+  (supabase.rpc as any).mockResolvedValue({
+    data: role
+      ? { id: "m1", user_id: "u1", role, created_at: "now" }
+      : null,
+    error: null,
+  });
+};
+
+const mockBootstrapError = () => {
+  (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error("rpc failed") });
+};
+
+const mockFallbackSelect = (role: string | null) => {
   (supabase.from as any).mockReturnValue({
     select: vi.fn().mockReturnValue({
       eq: vi.fn().mockReturnValue({
@@ -48,17 +61,27 @@ describe("useMembership", () => {
     expect(result.current.membership).toBeNull();
   });
 
-  it("returns the membership row for a signed-in user", async () => {
+  it("returns the membership row from bootstrap RPC for a signed-in user", async () => {
     mockSession("u1");
-    mockMembershipRow("admin");
+    mockBootstrap("admin");
     const { result } = renderHook(() => useMembership());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.membership?.role).toBe("admin");
   });
 
-  it("returns null membership when user has no row yet", async () => {
+  it("falls back to direct SELECT when bootstrap RPC errors", async () => {
     mockSession("u1");
-    mockMembershipRow(null);
+    mockBootstrapError();
+    mockFallbackSelect("organizer");
+    const { result } = renderHook(() => useMembership());
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(result.current.membership?.role).toBe("organizer");
+  });
+
+  it("returns null when bootstrap errors and fallback finds no row", async () => {
+    mockSession("u1");
+    mockBootstrapError();
+    mockFallbackSelect(null);
     const { result } = renderHook(() => useMembership());
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.membership).toBeNull();
