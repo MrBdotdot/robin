@@ -16,18 +16,18 @@ interface MemberWithEmail extends Membership {
   email: string | null;
 }
 
-export function AssignScorekeepersSheet({ eventId, open, onOpenChange, onChange }: Props) {
-  const [scorekeepers, setScorekeepers] = useState<MemberWithEmail[]>([]);
+export function AssignOrganizersSheet({ eventId, open, onOpenChange, onChange }: Props) {
+  const [organizers, setOrganizers] = useState<MemberWithEmail[]>([]);
   const [collaborators, setCollaborators] = useState<EventCollaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null); // user_id being toggled
 
   const load = async () => {
     setLoading(true);
-    // list_scorekeepers_with_email() is a security-definer RPC that does an
+    // list_organizers_with_email() is a security-definer RPC that does an
     // admin check inline (only admins receive rows). Replaces the previous
     // rr_memberships_with_email view which exposed auth.users emails too broadly.
-    const { data: m, error: mErr } = await supabase.rpc("list_scorekeepers_with_email");
+    const { data: m, error: mErr } = await supabase.rpc("list_organizers_with_email");
     const { data: c, error: cErr } = await supabase
       .from("rr_event_collaborators")
       .select("*")
@@ -37,7 +37,7 @@ export function AssignScorekeepersSheet({ eventId, open, onOpenChange, onChange 
       setLoading(false);
       return;
     }
-    setScorekeepers((m as MemberWithEmail[]) ?? []);
+    setOrganizers((m as MemberWithEmail[]) ?? []);
     setCollaborators((c as EventCollaborator[]) ?? []);
     setLoading(false);
   };
@@ -83,26 +83,26 @@ export function AssignScorekeepersSheet({ eventId, open, onOpenChange, onChange 
     <Sheet
       open={open}
       onClose={() => onOpenChange(false)}
-      title="Scorekeepers for this event"
+      title="Organizers for this event"
     >
       {loading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : scorekeepers.length === 0 ? (
+      ) : organizers.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No members have the scorekeeper role yet. Invite someone with the scorekeeper role from the avatar menu.
+          No members have the organizer role yet. Invite someone as an organizer from the avatar menu.
         </p>
       ) : (
         <div className="space-y-2">
-          {scorekeepers.map((m) => (
+          {organizers.map((m) => (
             <label
               key={m.id}
               className="flex cursor-pointer items-center justify-between rounded-md border p-3 text-sm"
             >
               <div>
                 <div className="font-medium">{m.email ?? "(unknown)"}</div>
-                <div className="text-xs text-muted-foreground">scorekeeper</div>
+                <div className="text-xs text-muted-foreground">organizer</div>
               </div>
               <input
                 type="checkbox"

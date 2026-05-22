@@ -124,8 +124,7 @@ export function InviteSheet({ open, onOpenChange }: Props) {
           onChange={(e) => setRole(e.target.value as Role)}
         >
           <option value="participant">Participant</option>
-          <option value="scorekeeper">Scorekeeper</option>
-          <option value="admin">Admin</option>
+          <option value="organizer">Organizer</option>
         </select>
         <Button type="submit" disabled={submitting || !email} className="w-full">
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate invite"}

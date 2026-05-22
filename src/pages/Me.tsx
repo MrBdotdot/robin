@@ -46,10 +46,10 @@ export default function Me() {
             <ShieldCheck className="h-5 w-5 text-primary" />
             {email}
           </CardTitle>
-          <CardDescription>
-            <Badge variant="outline">{role}</Badge>
-          </CardDescription>
         </CardHeader>
+        <CardContent>
+          <Badge variant="outline">{role}</Badge>
+        </CardContent>
       </Card>
 
       {/* Network rating placeholder (filled in by sub-project 3). */}
@@ -92,8 +92,8 @@ export default function Me() {
         </CardContent>
       </Card>
 
-      {/* Scorekeeper assignments (visible only if you have any). */}
-      {role === "scorekeeper" && (
+      {/* Organizer assignments (visible only if you have any). */}
+      {role === "organizer" && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

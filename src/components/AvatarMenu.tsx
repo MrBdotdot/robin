@@ -48,7 +48,12 @@ export function AvatarMenu() {
         {open && (
           <div
             className={cn(
-              "absolute right-0 top-10 z-50 w-56 rounded-md border bg-popover p-1 shadow-lg"
+              "absolute top-10 z-50 w-56 overflow-hidden rounded-md border bg-card p-1 shadow-lg",
+              // Mobile: avatar is top-right of screen, drop down extending LEFT.
+              "right-0",
+              // Desktop: avatar is in a narrow sidebar, drop down extending RIGHT
+              // into the main content area instead of overflowing the left edge.
+              "md:right-auto md:left-0"
             )}
           >
             <div className="px-3 py-2 text-xs text-muted-foreground">

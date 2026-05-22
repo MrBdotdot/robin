@@ -42,9 +42,9 @@ import type { ScoringTemplate } from "@/types/database";
 import { computeStandings, type Tiebreaker } from "@/lib/standings";
 import { regenerateFutureSchedule, appendOneRotation } from "@/lib/scheduleSync";
 import { useMembership } from "@/lib/membership";
-import { canAssignScorekeepers, canScoreEvent, canViewEditChrome } from "@/lib/permissions";
+import { canAssignOrganizers, canScoreEvent, canViewEditChrome } from "@/lib/permissions";
 import { useSession } from "@/lib/auth";
-import { AssignScorekeepersSheet } from "@/components/AssignScorekeepersSheet";
+import { AssignOrganizersSheet } from "@/components/AssignOrganizersSheet";
 
 type Tab = "schedule" | "standings" | "bracket" | "roster";
 
@@ -74,7 +74,7 @@ export default function EventDetail() {
   const [hoverEdge, setHoverEdge] = useState<"above" | "below" | null>(null);
   const [addingRounds, setAddingRounds] = useState(false);
   const { membership } = useMembership();
-  const [scorekeepersOpen, setScorekeepersOpen] = useState(false);
+  const [organizersOpen, setOrganizersOpen] = useState(false);
   const session = useSession();
   const [eventCollabs, setEventCollabs] = useState<EventCollaborator[]>([]);
 
@@ -468,18 +468,18 @@ export default function EventDetail() {
         </div>
       </header>
 
-      {canAssignScorekeepers(membership) && id && (
+      {canAssignOrganizers(membership) && id && (
         <section className="mb-4 rounded-md border p-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Users className="h-4 w-4" /> Scorekeepers
+                <Users className="h-4 w-4" /> Organizers
               </h3>
               <p className="text-xs text-muted-foreground">
-                Assigned scorekeepers can enter scores on this event.
+                Assigned organizers can enter scores on this event.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setScorekeepersOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setOrganizersOpen(true)}>
               Manage
             </Button>
           </div>
@@ -1057,10 +1057,10 @@ export default function EventDetail() {
       })()}
 
       {id && (
-        <AssignScorekeepersSheet
+        <AssignOrganizersSheet
           eventId={id}
-          open={scorekeepersOpen}
-          onOpenChange={setScorekeepersOpen}
+          open={organizersOpen}
+          onOpenChange={setOrganizersOpen}
         />
       )}
     </div>

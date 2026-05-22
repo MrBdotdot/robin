@@ -244,10 +244,10 @@ export type Database = {
 };
 
 // =========================================================================
-// Phase 2 — auth, memberships, invites, scorekeeper assignment
+// Phase 2 — auth, memberships, invites, organizer assignment
 // =========================================================================
 
-export type Role = "admin" | "scorekeeper" | "participant";
+export type Role = "admin" | "organizer" | "participant";
 
 export interface Membership {
   id: string;

@@ -5,7 +5,7 @@ import {
   canScoreEvent,
   canViewEditChrome,
   isAdmin,
-  isScorekeeper,
+  isOrganizer,
   isParticipant,
 } from "../permissions";
 import type { Membership, EventCollaborator } from "@/types/database";
@@ -18,15 +18,15 @@ const m = (role: Membership["role"]): Membership => ({
 });
 
 describe("permissions", () => {
-  describe("isAdmin / isScorekeeper / isParticipant", () => {
+  describe("isAdmin / isOrganizer / isParticipant", () => {
     it("admin", () => {
       expect(isAdmin(m("admin"))).toBe(true);
-      expect(isAdmin(m("scorekeeper"))).toBe(false);
+      expect(isAdmin(m("organizer"))).toBe(false);
       expect(isAdmin(null)).toBe(false);
     });
-    it("scorekeeper", () => {
-      expect(isScorekeeper(m("scorekeeper"))).toBe(true);
-      expect(isScorekeeper(m("admin"))).toBe(false);
+    it("organizer", () => {
+      expect(isOrganizer(m("organizer"))).toBe(true);
+      expect(isOrganizer(m("admin"))).toBe(false);
     });
     it("participant", () => {
       expect(isParticipant(m("participant"))).toBe(true);
@@ -37,7 +37,7 @@ describe("permissions", () => {
   describe("canCreateEvent", () => {
     it("admin only", () => {
       expect(canCreateEvent(m("admin"))).toBe(true);
-      expect(canCreateEvent(m("scorekeeper"))).toBe(false);
+      expect(canCreateEvent(m("organizer"))).toBe(false);
       expect(canCreateEvent(m("participant"))).toBe(false);
       expect(canCreateEvent(null)).toBe(false);
     });
@@ -46,7 +46,7 @@ describe("permissions", () => {
   describe("canEditEvent", () => {
     it("admin only", () => {
       expect(canEditEvent(m("admin"))).toBe(true);
-      expect(canEditEvent(m("scorekeeper"))).toBe(false);
+      expect(canEditEvent(m("organizer"))).toBe(false);
     });
   });
 
@@ -62,11 +62,11 @@ describe("permissions", () => {
     it("admin can score any event", () => {
       expect(canScoreEvent(m("admin"), "u", "e1", [])).toBe(true);
     });
-    it("scorekeeper with collaborator row for the event", () => {
-      expect(canScoreEvent(m("scorekeeper"), "u", "e1", [collab("u", "e1")])).toBe(true);
+    it("organizer with collaborator row for the event", () => {
+      expect(canScoreEvent(m("organizer"), "u", "e1", [collab("u", "e1")])).toBe(true);
     });
-    it("scorekeeper without collaborator row for the event", () => {
-      expect(canScoreEvent(m("scorekeeper"), "u", "e1", [collab("u", "e2")])).toBe(false);
+    it("organizer without collaborator row for the event", () => {
+      expect(canScoreEvent(m("organizer"), "u", "e1", [collab("u", "e2")])).toBe(false);
     });
     it("participant cannot score", () => {
       expect(canScoreEvent(m("participant"), "u", "e1", [collab("u", "e1")])).toBe(false);
@@ -81,7 +81,7 @@ describe("permissions", () => {
       expect(canViewEditChrome(m("admin"))).toBe(true);
     });
     it("non-admin hides edit chrome", () => {
-      expect(canViewEditChrome(m("scorekeeper"))).toBe(false);
+      expect(canViewEditChrome(m("organizer"))).toBe(false);
       expect(canViewEditChrome(m("participant"))).toBe(false);
       expect(canViewEditChrome(null)).toBe(false);
     });

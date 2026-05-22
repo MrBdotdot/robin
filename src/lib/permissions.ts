@@ -4,8 +4,8 @@ export function isAdmin(m: Membership | null): boolean {
   return m?.role === "admin";
 }
 
-export function isScorekeeper(m: Membership | null): boolean {
-  return m?.role === "scorekeeper";
+export function isOrganizer(m: Membership | null): boolean {
+  return m?.role === "organizer";
 }
 
 export function isParticipant(m: Membership | null): boolean {
@@ -32,13 +32,13 @@ export function canSendInvites(m: Membership | null): boolean {
   return isAdmin(m);
 }
 
-export function canAssignScorekeepers(m: Membership | null): boolean {
+export function canAssignOrganizers(m: Membership | null): boolean {
   return isAdmin(m);
 }
 
 /**
  * True iff the user can edit scores on a specific event. Admin always;
- * scorekeeper iff they have an EventCollaborator row for that event.
+ * organizer iff they have an EventCollaborator row for that event.
  */
 export function canScoreEvent(
   m: Membership | null,
@@ -47,7 +47,7 @@ export function canScoreEvent(
   collaborators: EventCollaborator[]
 ): boolean {
   if (isAdmin(m)) return true;
-  if (!isScorekeeper(m)) return false;
+  if (!isOrganizer(m)) return false;
   return collaborators.some((c) => c.user_id === userId && c.event_id === eventId);
 }
 

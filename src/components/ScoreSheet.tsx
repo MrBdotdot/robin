@@ -516,7 +516,7 @@ export function ScoreSheet({
           )}
           {!canScore && (
             <div className="mb-4 rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-              You don't have permission to enter scores on this event. An organizer can assign you as a scorekeeper.
+              You don't have permission to enter scores on this event. An admin can assign you as an organizer.
             </div>
           )}
           <fieldset disabled={!canScore} className={cn(!canScore && "opacity-90")}>
