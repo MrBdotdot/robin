@@ -1,6 +1,6 @@
 # Round Robin — Claude working notes
 
-A small, mobile-first web app for running round-robin tournaments (mostly pickleball, but sport-agnostic). Single-user, password-gated, Supabase-backed. No build server, no SSR — just Vite → static.
+A small, mobile-first web app for running round-robin tournaments (mostly pickleball, but sport-agnostic). Multi-user, magic-link auth via Supabase Auth, Supabase-backed. No build server, no SSR — just Vite → static.
 
 These notes exist so a fresh Claude session can pick up work without re-reading every file. Update this file when you change something architectural.
 
@@ -9,25 +9,30 @@ These notes exist so a fresh Claude session can pick up work without re-reading 
 - React 18 + TypeScript + Vite
 - Tailwind CSS + a small in-house shadcn-style UI kit (`src/components/ui/`)
 - React Router v6 (`src/App.tsx` is the route table)
-- Supabase (Postgres + auto-generated REST) — single client at `src/lib/supabase.ts`
+- Supabase (Postgres + Auth + Edge Functions) — single client at `src/lib/supabase.ts`
 - Glicko-2 for ratings (custom impl in `src/lib/glicko2.ts`)
 - `sonner` for toasts, `lucide-react` for icons
+- Vitest for unit tests (added in Phase 2; `npm run test` / `npm run test:run`)
+- One Edge Function at `supabase/functions/send-invite/` (Resend integration for invite emails)
 
-No backend code — every mutation is a direct Supabase call from the browser. The `PasswordGate` component is the only auth.
+Every mutation is a direct Supabase call from the browser, gated by RLS. The only server-side code is the `send-invite` Edge Function.
 
 ## Routes / page map
 
-| Path | File | Purpose |
-|---|---|---|
-| `/events` | `pages/EventsList.tsx` | Cards of all events |
-| `/events/new` | `pages/EventCreate.tsx` + `pages/wizard/*` | Multi-step wizard to create an event |
-| `/events/:id` | `pages/EventDetail.tsx` | Live event: rounds, scoring, standings, finalize |
-| `/players` | `pages/PlayersList.tsx` | All players + global ratings |
-| `/players/:id` | `pages/PlayerProfile.tsx` | Single player: ratings, history, h2h, partners, **per-series ratings** |
-| `/players/pairs` | `pages/PairLeaderboard.tsx` | Doubles pair ratings |
-| `/series` | `pages/SeriesList.tsx` | All series |
-| `/series/:id` | `pages/SeriesDetail.tsx` | Series: cumulative standings, **Ratings tab**, events |
-| `/settings` | `pages/Settings.tsx` | Misc config |
+| Path | File | Purpose | Access |
+|---|---|---|---|
+| `/` | `pages/Dashboard.tsx` (admin) or `Me.tsx` (others, via `HomeRedirect`) | Admin home or participant home | All signed-in |
+| `/me` | `pages/Me.tsx` | Participant home — profile, network rating placeholder, events/series you're in | All signed-in |
+| `/invite/:token` | `pages/Invite.tsx` | Invite redemption (signed-out or signed-in) | Open (handles its own auth) |
+| `/events` | `pages/EventsList.tsx` | Cards of all events | Admin-only |
+| `/events/new` | `pages/EventCreate.tsx` + `pages/wizard/*` | Multi-step event wizard | Admin-only |
+| `/events/:id` | `pages/EventDetail.tsx` | Live event: rounds, scoring, standings, finalize; edit chrome gated by role | Admin/organizer/in-event |
+| `/players` | `pages/PlayersList.tsx` | All players + global ratings | All signed-in |
+| `/players/:id` | `pages/PlayerProfile.tsx` | Single player: ratings, history, h2h, partners, **per-series ratings** | All signed-in |
+| `/players/pairs` | `pages/PairLeaderboard.tsx` | Doubles pair ratings | All signed-in |
+| `/series` | `pages/SeriesList.tsx` | All series | All signed-in |
+| `/series/:id` | `pages/SeriesDetail.tsx` | Series: cumulative standings, Ratings tab, events; edit chrome gated by role | All signed-in |
+| `/settings` | `pages/Settings.tsx` | Misc config | All signed-in |
 
 ## Domain model
 
@@ -39,9 +44,24 @@ Database lives in Supabase under the `rr_` prefix. Hand-typed in `src/types/data
 - `rr_event_players` — membership rows. Stores `initial_rating_snapshot` (JSON, see below)
 - `rr_matches` — every match, scheduled or completed. Score blob in `scores`
 - `rr_series` — a long-running league/season grouping events
-- `rr_series_ratings` — **per-(player, series) Glicko ratings**. Added in migration 003
+- `rr_series_ratings` — **per-(player, series) Glicko ratings**. Added in migration 003 — **note: this table doesn't exist in the live Supabase** (migration-003 was never applied; the SeriesDetail Ratings tab renders empty as a result)
 - `rr_rating_history` — append-only log of (event → rating before/after) for the global rating chart
 - `rr_pair_rating_history` — same idea for pairs
+
+### Phase 2 auth tables (migration-004 and on)
+
+- `rr_memberships` — one row per signed-in human. `role` is `admin` / `organizer` / `participant`
+- `rr_invites` — pending and accepted invites. Token-as-capability for redemption
+- `rr_event_collaborators` — per-event organizer assignment (existence of row = can score that event)
+
+### Phase 2 SQL helpers / RPCs
+
+- `rr_is_admin()`, `rr_is_member()`, `rr_can_score(event_id)` — boolean stable functions used in RLS policies
+- `rr_is_in_event(event_id)` — **stubbed to return false** in Phase 2. Sub-project 2 (slim claim) will replace this with claim-aware logic
+- `bootstrap_membership()` — security-definer RPC that idempotently creates a membership row on first sign-in. First user with no admin becomes admin; rest become participants. Called from `useMembership()`
+- `accept_invite(token)` — security-definer RPC that consumes an invite and creates the membership row
+- `lookup_invite(token)` — anon-callable security-definer RPC for the redemption page to fetch a single invite without exposing the whole table
+- `list_organizers_with_email()` — admin-gated security-definer RPC. Returns scorekeeper memberships joined with `auth.users.email` for the AssignOrganizersSheet
 
 ### `initial_rating_snapshot` shape
 
@@ -115,13 +135,21 @@ upsertSeriesRating(seriesId, playerId, {
 
 ## Migrations
 
-Migration SQL is generated as deliverables and lives outside `src/`. The most recent:
+The `migrations/` folder now exists at the repo root. From Phase 2 onward, all migration SQL is tracked there. Applied manually via the Supabase SQL editor in numeric order.
 
-- `migration-001` — initial schema
-- `migration-002-rating-history` — `rr_rating_history`, `rr_pair_rating_history`
-- `migration-003-series-ratings` — `rr_series_ratings` + the `series` block in `initial_rating_snapshot`
+| File | Adds | In repo? | In live DB? |
+|---|---|---|---|
+| `migration-001-initial-schema` | Core tables | no (old session output) | yes |
+| `migration-002-rating-history` | rating history tables | no | yes |
+| `migration-003-series-ratings` | rr_series_ratings + snapshot series block | no | **NO** — never applied; SeriesDetail Ratings tab renders empty |
+| `migration-004-auth-phase-2.sql` | rr_memberships, rr_invites, rr_event_collaborators + helper functions | yes | yes |
+| `migration-004a-fix-view-security.sql` | replaces leaky email view with admin-gated RPC | yes | yes |
+| `migration-004b-bootstrap-rpc.sql` | bootstrap_membership + accept_invite RPCs (extracted from 005 so they exist before first sign-in) | yes | yes |
+| `migration-005-rls-tighten.sql` | RLS policies for the three-role model | yes | yes (with `rr_series_ratings` policies skipped since the table doesn't exist) |
+| `migration-006-rename-scorekeeper-to-organizer.sql` | Role rename | yes | yes |
+| `migration-007-invite-dedup-and-member-check.sql` | Partial unique index on pending invites + trigger rejecting invites for existing members | yes | yes |
 
-There is no `migrations/` folder in the repo yet. Migrations have to be applied manually in the Supabase SQL editor. **TODO**: copy them into `migrations/` so they're source-controlled.
+D3 is partially shipped: new migrations are tracked, but 001/002/003 still live in old session output. Backfilling them remains a polish item.
 
 ## Conventions
 
@@ -171,9 +199,39 @@ These came out of the May 2026 audit. Bundle A shipped (matches_played, seed-fro
 
 ```sh
 npm install
-npm run dev      # vite dev server, default port 5173
-npm run build    # tsc -b && vite build
-npm run lint     # tsc -b --noEmit
+npm run dev       # vite dev server, default port 5173
+npm run build     # tsc -b && vite build
+npm run lint      # tsc -b --noEmit
+npm run test      # vitest watch
+npm run test:run  # vitest single-run (CI mode)
 ```
 
-`.env.local` holds `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` + `VITE_APP_PASSWORD` (the gate).
+`.env.local` holds `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`. (`VITE_APP_PASSWORD` is no longer used; auth went magic-link in Phase 2.)
+
+Worktrees: `.env.local` is gitignored so it doesn't carry across worktrees. Copy it from the main repo when you spin up a new worktree, or local dev will throw "Missing VITE_SUPABASE_URL."
+
+## Deployment
+
+- **Vercel project**: `round-robin`. Linked to `MrBdotdot/robin` on GitHub. Pushes to `main` auto-deploy to **https://round-robin-sand.vercel.app**. Pushes to any branch get a preview URL.
+- **Supabase project**: `sbzomcpqwueftuosobtd` (project ref). Same backend for local dev and production — both `.env.local` and Vercel envs point at the same URL.
+- **Edge Function**: `send-invite`. Deploy with `npx supabase functions deploy send-invite --project-ref sbzomcpqwueftuosobtd`. Reads secrets at runtime — no redeploy needed for secret changes.
+
+## Supabase configuration (project state worth remembering)
+
+- **Auth providers**: email/magic-link enabled. Password sign-up may be on (left as-is); the app uses magic-link only.
+- **Auth → URL Configuration**: Site URL = `https://round-robin-sand.vercel.app`. Redirect URLs include the prod URL, a wildcard for preview URLs (`https://round-robin-*-mrbdotdots-projects.vercel.app/**`), and `http://localhost:5173/**`.
+- **Auth → Email → SMTP Settings**: custom SMTP via Resend (host `smtp.resend.com:465`, username `resend`, password = Resend API key, sender = whatever's verified, sender name set to whatever you want).
+- **Edge Function secrets** (Project Settings → Edge Functions → Secrets):
+  - `RESEND_API_KEY` — Resend API key
+  - `INVITE_FROM_EMAIL` — sender for invite emails (`onboarding@resend.dev` until a domain is verified; then `noreply@yourdomain.com`)
+  - `INVITE_FROM_NAME` — optional display name, e.g. `Will from Robin Rounds`
+  - `APP_URL` — `https://round-robin-sand.vercel.app` (used to construct invite URLs in the email body)
+
+## Phase 2 follow-ups (in priority order)
+
+1. **Verify a Resend domain** — until verified, the sandbox sender only delivers to the Resend account email. Blocks inviting anyone outside `wbeestudio@gmail.com`.
+2. **Sub-project 2 — slim claim flow** — at signup, let invitees pick one `rr_players` row that represents them (sets `claimed_by_user_id`). Replaces the `rr_is_in_event` stub with real claim-aware logic. Unlocks the participant view's events/series lists on `/me`.
+3. **Sub-project 3 — network rating** — personal Glicko rating computed only against matches involving claimed players. Original ask. Depends on sub-project 2.
+4. **Apply migration-003 to live DB** — `rr_series_ratings` doesn't exist. Series Ratings tab is non-functional. SQL lives in old session output; will need recovery or re-derivation from `src/lib/seriesRatings.ts` types.
+5. **Column-level enforcement on `rr_matches.update` for organizers** — RLS is row-level; an organizer could currently update any column on a match they're assigned to, not just score columns. Mitigation = before-update trigger.
+6. **Audit log surfacing** — `rr_audit_log` exists but nothing reads/writes it yet.

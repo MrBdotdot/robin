@@ -553,10 +553,12 @@ broadly.
 
 ## 14. Known limitations and backlog
 
-**Auth.** The password gate is testing-grade. Anyone who opens DevTools
-can bypass it and the anon key has full read/write on every table.
-Before sharing the deployed URL more widely, switch to Supabase Auth
-and tighten RLS policies to per-user scoping.
+**Auth — SHIPPED 2026-05-22 (Phase 2).** Replaced the shared password
+with Supabase magic-link auth, three-role memberships (admin /
+organizer / participant), per-event organizer assignment, an invite
+system with Resend-delivered emails, and tightened RLS across every
+`rr_*` table. See `CLAUDE.md` and the spec at
+`docs/superpowers/specs/2026-05-04-auth-phase-2-design.md`.
 
 **`PlayerProfile.tsx` is monolithic.** Still around 600 lines with
 Events / H2H / Partners / Recent / Rating tabs all in one file. Should
@@ -587,18 +589,25 @@ Lives on Vercel as a static SPA backed by Supabase. The repo root has a
 `vercel.json` with a single rewrite rule that sends every non-asset
 path to `index.html` so React Router routes survive a hard refresh.
 
-Three environment variables need to be set on Vercel for the build to
+Two environment variables need to be set on Vercel for the build to
 work:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_APP_PASSWORD`
 
 These come from your local `.env.local` and need to be added under
 Vercel's Settings → Environment Variables (for Production at minimum;
 ideally Preview too). Pushing to `main` triggers an auto-redeploy if
 the project is GitHub-connected; otherwise you can run `vercel --prod`
 from the project directory to deploy via the CLI.
+
+(`VITE_APP_PASSWORD` was dropped in Phase 2 — auth is now magic-link
+via Supabase Auth.)
+
+The deployed production URL is **https://round-robin-sand.vercel.app**.
+The `send-invite` Edge Function lives in `supabase/functions/` and is
+deployed separately via the Supabase CLI; see CLAUDE.md for the
+deploy command and the secrets it expects.
 
 The full setup walkthrough lives in `README.md` under "Deploying to
 Vercel."

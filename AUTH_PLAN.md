@@ -1,5 +1,14 @@
 # Auth + Invites + Identity Merge — Plan
 
+**Status update (2026-05-22):** Phases 1 and 2 are shipped. This document is preserved for historical context but the live design + plan for Phase 2 lives in `docs/superpowers/specs/2026-05-04-auth-phase-2-design.md` and `docs/superpowers/plans/2026-05-04-auth-phase-2-plan.md`. Phase 3 below is replaced by two smaller scopes:
+
+- **Sub-project 2 — slim claim flow**: single-claim only, no merge or undo UI. Lets invitees pick the existing `rr_players` row that represents them at signup. Replaces the `rr_is_in_event` SQL stub.
+- **Sub-project 3 — network rating**: personal Glicko rating against matches involving claimed players in your tenant. The original ask.
+
+The full multi-claim merge + undo + admin override scope below (the "Phase 3" originally drafted) is deferred indefinitely.
+
+---
+
 A phased plan for replacing the password gate with real per-user accounts, adding an invite flow, and letting invitees claim ad-hoc `rr_players` rows that were typed in by name before they had an account.
 
 This is a multi-session project. Treat each phase as its own PR-sized chunk.

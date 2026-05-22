@@ -3,29 +3,17 @@
 Features that have been considered and consciously deferred. Pull from this
 list when ready to keep building.
 
-## Auth — promote from testing-grade to production
+## Auth — promote from testing-grade to production ✅ SHIPPED 2026-05-22
 
-Current state: a single shared password (`415`) gates the whole app, set via
-`VITE_APP_PASSWORD`. Supabase RLS is enabled on every `rr_*` table but
-policies allow `anon` to do everything — the frontend gate is the only real
-access control.
+Shipped as Phase 2. Replaces the shared password with Supabase magic-link auth, adds a three-role membership model (admin / organizer / participant) with per-event organizer assignment, an invite system, and tightened RLS across every `rr_*` table. See `docs/superpowers/specs/2026-05-04-auth-phase-2-design.md` and `CLAUDE.md` for details.
 
-To go public, replace with:
+**Auth-adjacent items still deferred:**
 
-- **Supabase Auth** — email magic link or OAuth (Google).
-- **Roles**: admin (full edit), scorekeeper (enter scores only), spectator
-  (read-only). Store as a custom claim or a role row keyed by `auth.uid()`.
-- **RLS policies** rewritten to check `auth.uid()` and the role claim per
-  table. Admins/scorekeepers can write; spectators read only. Score entry
-  permitted to any signed-in user; event creation/finalization to admins.
-- **Per-event share links** that issue a scoped JWT (signed via an Edge
-  Function) so spectators don't even need an account.
-- **Audit log enforcement**: a trigger on `rr_matches` writing the actor's
-  `auth.uid()` to `rr_audit_log` for every score change.
-
-Migration plan: add an `auth` schema users mapping table, extend RLS
-policies with role checks, swap the password gate for a Supabase Auth
-component, add a "share link" button per event for spectator access.
+- **Sub-project 2 — slim claim flow** (next on the roadmap): at signup, an invitee picks the existing `rr_players` row that represents them. Replaces the `rr_is_in_event` SQL stub so `/me` actually shows match history.
+- **Sub-project 3 — network rating**: personal Glicko rating computed only against claimed-player matches. Depends on sub-project 2.
+- **Per-event share links** for spectator read-only access without an account (deferred — Phase 2 took a different shape).
+- **Audit log enforcement** (`rr_audit_log` still exists but nothing reads/writes it).
+- **Resend domain verification** so invites can go to any address (currently sandboxed to wbeestudio@gmail.com until DNS verification completes).
 
 ## Other deferred ideas
 
