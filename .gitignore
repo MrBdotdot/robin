@@ -37,3 +37,7 @@ node_modules
 .env.*.local
 
 .vercel
+
+# Supabase CLI local state (per-machine, not for VCS)
+supabase/.temp/
+supabase/.branches/
