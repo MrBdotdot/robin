@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Loader2, Lock } from "lucide-react";
-import { signIn, signUp, useSession } from "@/lib/auth";
+import { Loader2, Lock, Mail } from "lucide-react";
+import { signInWithMagicLink, useSession } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -10,22 +10,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
 interface AuthGateProps {
   children: ReactNode;
 }
 
-type Mode = "sign_in" | "sign_up";
-
+// Bootstrap of the membership row now lives inside useMembership() — no
+// duplicate call needed here.
 export function AuthGate({ children }: AuthGateProps) {
   const session = useSession();
-  const [mode, setMode] = useState<Mode>("sign_in");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
 
   if (session === "loading") {
     return (
@@ -38,36 +35,24 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  if (session) return <>{children}</>;
+  if (session) {
+    return <>{children}</>;
+  }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (submitting) return;
     setError(null);
-    setInfo(null);
-    if (!email || !password) {
-      setError("Email and password are required.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
     setSubmitting(true);
     try {
-      if (mode === "sign_in") {
-        await signIn(email.trim(), password);
-        // useSession will pick up the new session via onAuthStateChange
-      } else {
-        await signUp(email.trim(), password);
-        setInfo(
-          "Account created. If your project requires email confirmation, click the link in your inbox before signing in."
-        );
-        setMode("sign_in");
-        setPassword("");
-      }
+      // Preserve invite token if user landed via /invite/:token
+      const path = window.location.pathname;
+      const redirectTo = path.startsWith("/invite/")
+        ? `${window.location.origin}${path}`
+        : window.location.origin;
+      await signInWithMagicLink(email, redirectTo);
+      setLinkSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : "Could not send link");
     } finally {
       setSubmitting(false);
     }
@@ -76,78 +61,59 @@ export function AuthGate({ children }: AuthGateProps) {
   return (
     <div className="flex min-h-full items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Lock className="h-5 w-5" />
-          </div>
-          <CardTitle>Round Robin</CardTitle>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Lock className="h-4 w-4" />
+            Round Robin
+          </CardTitle>
           <CardDescription>
-            {mode === "sign_in"
-              ? "Sign in to continue."
-              : "Create an account."}
+            {linkSent
+              ? "Check your email for a sign-in link."
+              : "Enter your email; we'll send you a one-time link."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 flex gap-1 rounded-md bg-muted p-1">
-            {(["sign_in", "sign_up"] as const).map((m) => (
+          {linkSent ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center text-sm text-muted-foreground">
+              <Mail className="h-8 w-8 text-primary" />
+              <p>
+                We sent a link to <strong>{email}</strong>. Open it on this device
+                to sign in.
+              </p>
               <button
-                key={m}
                 type="button"
+                className="text-xs underline"
                 onClick={() => {
-                  setMode(m);
-                  setError(null);
-                  setInfo(null);
+                  setLinkSent(false);
+                  setEmail("");
                 }}
-                className={cn(
-                  "flex-1 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
-                  mode === m
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
               >
-                {m === "sign_in" ? "Sign in" : "Sign up"}
+                Use a different email
               </button>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <Input
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder="Email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (error) setError(null);
-              }}
-              aria-invalid={!!error}
-            />
-            <Input
-              type="password"
-              autoComplete={
-                mode === "sign_in" ? "current-password" : "new-password"
-              }
-              placeholder="Password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(null);
-              }}
-              aria-invalid={!!error}
-            />
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {info && <p className="text-sm text-muted-foreground">{info}</p>}
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={submitting}
-            >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {mode === "sign_in" ? "Sign in" : "Create account"}
-            </Button>
-          </form>
+            </div>
+          ) : (
+            <form className="space-y-3" onSubmit={onSubmit}>
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoFocus
+                autoComplete="email"
+              />
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={submitting || !email}>
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Send me a link"
+                )}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

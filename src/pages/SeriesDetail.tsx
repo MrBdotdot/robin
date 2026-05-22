@@ -24,6 +24,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { AssignEventsSheet } from "@/components/AssignEventsSheet";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { useMembership } from "@/lib/membership";
+import { isAdmin } from "@/lib/permissions";
 
 type TabKey = "standings" | "ratings" | "events";
 
@@ -48,6 +50,8 @@ export default function SeriesDetail() {
   const [tab, setTab] = useState<TabKey>("events");
   const [assigning, setAssigning] = useState(false);
   const [seriesRatings, setSeriesRatings] = useState<SeriesRating[]>([]);
+  const { membership } = useMembership();
+  const showEditChrome = isAdmin(membership);
 
   const load = async () => {
     if (!id) return;
@@ -449,16 +453,20 @@ export default function SeriesDetail() {
 
       {tab === "events" && (
         <>
-          <div className="mb-3 flex items-center justify-end">
-            <Button size="sm" onClick={() => setAssigning(true)}>
-              <Plus className="h-4 w-4" />
-              Manage events
-            </Button>
-          </div>
+          {showEditChrome && (
+            <div className="mb-3 flex items-center justify-end">
+              <Button size="sm" onClick={() => setAssigning(true)}>
+                <Plus className="h-4 w-4" />
+                Manage events
+              </Button>
+            </div>
+          )}
           <Card className="overflow-hidden">
             {events.length === 0 ? (
               <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No events in this series yet. Tap "Manage events" above to add some.
+                {showEditChrome
+                  ? 'No events in this series yet. Tap "Manage events" above to add some.'
+                  : "No events in this series yet."}
               </div>
             ) : (
               <ul className="divide-y">
@@ -494,14 +502,16 @@ export default function SeriesDetail() {
         </>
       )}
 
-      <AssignEventsSheet
-        open={assigning}
-        onClose={() => setAssigning(false)}
-        seriesId={series.id}
-        seriesName={series.name}
-        assignedEventIds={events.map((e) => e.id)}
-        onAssigned={load}
-      />
+      {showEditChrome && (
+        <AssignEventsSheet
+          open={assigning}
+          onClose={() => setAssigning(false)}
+          seriesId={series.id}
+          seriesName={series.name}
+          assignedEventIds={events.map((e) => e.id)}
+          onAssigned={load}
+        />
+      )}
     </div>
   );
 }

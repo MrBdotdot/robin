@@ -242,3 +242,45 @@ export type Database = {
     CompositeTypes: {};
   };
 };
+
+// =========================================================================
+// Phase 2 — auth, memberships, invites, organizer assignment
+// =========================================================================
+
+export type Role = "admin" | "organizer" | "participant";
+
+export interface Membership {
+  id: string;
+  user_id: string;
+  role: Role;
+  created_at: string;
+}
+
+export interface Invite {
+  id: string;
+  email: string;
+  role: Role;
+  token: string;
+  expires_at: string;
+  accepted_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+/** Result of the lookup_invite RPC (subset of Invite, no token/created_by). */
+export interface InviteLookup {
+  id: string;
+  email: string;
+  role: Role;
+  expires_at: string;
+  accepted_at: string | null;
+}
+
+export interface EventCollaborator {
+  id: string;
+  user_id: string;
+  event_id: string;
+  granted_by: string;
+  granted_at: string;
+}
+
