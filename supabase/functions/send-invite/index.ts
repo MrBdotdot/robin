@@ -75,7 +75,13 @@ serve(async (req) => {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      from: Deno.env.get("INVITE_FROM_EMAIL") ?? "no-reply@example.com",
+      // Resend accepts either a bare email ("noreply@x.com") or a name+email
+      // string ("Name <noreply@x.com>"). Recipients see the display name.
+      from: (() => {
+        const email = Deno.env.get("INVITE_FROM_EMAIL") ?? "no-reply@example.com";
+        const name = Deno.env.get("INVITE_FROM_NAME");
+        return name ? `${name} <${email}>` : email;
+      })(),
       to: invite.email,
       subject,
       html,
