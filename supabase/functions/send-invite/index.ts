@@ -7,6 +7,7 @@
 // Supabase Studio (Project Settings -> Edge Functions -> Secrets):
 //   - RESEND_API_KEY        (required)
 //   - INVITE_FROM_EMAIL     (e.g. no-reply@yourdomain.com or onboarding@resend.dev)
+//   - INVITE_FROM_NAME      (optional display name, e.g. "Will from Robin Rounds")
 //   - APP_URL               (e.g. https://your-app.vercel.app)
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
@@ -17,9 +18,30 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const APP_URL = Deno.env.get("APP_URL") ?? "https://round-robin.example.com";
 
+// Browser preflight needs explicit CORS allowance. Permissive defaults
+// are fine since the function does its own admin check.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const jsonResponse = (body: unknown, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS_HEADERS, "content-type": "application/json" },
+  });
+
+const textResponse = (body: string, status: number) =>
+  new Response(body, { status, headers: CORS_HEADERS });
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
   if (req.method !== "POST") {
-    return new Response("method not allowed", { status: 405 });
+    return textResponse("method not allowed", 405);
   }
 
   // Verify the caller is signed in and an admin.
@@ -28,7 +50,7 @@ serve(async (req) => {
     global: { headers: { Authorization: authHeader } },
   });
   const { data: { user } } = await userClient.auth.getUser();
-  if (!user) return new Response("unauthorized", { status: 401 });
+  if (!user) return textResponse("unauthorized", 401);
 
   const adminClient = createClient(SUPABASE_URL, SERVICE_KEY);
   const { data: membership } = await adminClient
@@ -37,18 +59,18 @@ serve(async (req) => {
     .eq("user_id", user.id)
     .maybeSingle();
   if (membership?.role !== "admin") {
-    return new Response("forbidden", { status: 403 });
+    return textResponse("forbidden", 403);
   }
 
   const { invite_id } = await req.json();
-  if (!invite_id) return new Response("invite_id required", { status: 400 });
+  if (!invite_id) return textResponse("invite_id required", 400);
 
   const { data: invite, error: inviteErr } = await adminClient
     .from("rr_invites")
     .select("*")
     .eq("id", invite_id)
     .maybeSingle();
-  if (inviteErr || !invite) return new Response("invite not found", { status: 404 });
+  if (inviteErr || !invite) return textResponse("invite not found", 404);
 
   const inviteUrl = `${APP_URL}/invite/${invite.token}`;
   const subject = "You're invited to Round Robin";
@@ -62,11 +84,17 @@ serve(async (req) => {
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) {
-    return new Response(
-      JSON.stringify({ error: "RESEND_API_KEY not configured. Set it in Supabase project secrets." }),
-      { status: 500, headers: { "content-type": "application/json" } }
+    return jsonResponse(
+      { error: "RESEND_API_KEY not configured. Set it in Supabase project secrets." },
+      500
     );
   }
+
+  // Resend accepts either a bare email ("noreply@x.com") or a name+email
+  // string ("Name <noreply@x.com>"). Recipients see the display name.
+  const fromEmail = Deno.env.get("INVITE_FROM_EMAIL") ?? "no-reply@example.com";
+  const fromName = Deno.env.get("INVITE_FROM_NAME");
+  const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
   const emailRes = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -74,30 +102,13 @@ serve(async (req) => {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      // Resend accepts either a bare email ("noreply@x.com") or a name+email
-      // string ("Name <noreply@x.com>"). Recipients see the display name.
-      from: (() => {
-        const email = Deno.env.get("INVITE_FROM_EMAIL") ?? "no-reply@example.com";
-        const name = Deno.env.get("INVITE_FROM_NAME");
-        return name ? `${name} <${email}>` : email;
-      })(),
-      to: invite.email,
-      subject,
-      html,
-    }),
+    body: JSON.stringify({ from, to: invite.email, subject, html }),
   });
 
   if (!emailRes.ok) {
     const text = await emailRes.text();
-    return new Response(JSON.stringify({ error: `email send failed: ${text}` }), {
-      status: 502,
-      headers: { "content-type": "application/json" },
-    });
+    return jsonResponse({ error: `email send failed: ${text}` }, 502);
   }
 
-  return new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  return jsonResponse({ ok: true }, 200);
 });
