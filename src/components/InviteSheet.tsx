@@ -27,6 +27,17 @@ function randomToken(): string {
     .replace(/=+$/, "");
 }
 
+/** Translate raw Postgres errors from migration-007's constraints into something a human can read. */
+function friendlyInviteError(raw: string, email: string): string {
+  if (raw.includes("rr_invites_unique_pending_email")) {
+    return `An invite for ${email} is already pending. Revoke it first if you want to start over.`;
+  }
+  if (raw.includes("is already a member")) {
+    return `${email} is already a member — no invite needed.`;
+  }
+  return raw;
+}
+
 export function InviteSheet({ open, onOpenChange }: Props) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("participant");
@@ -69,11 +80,11 @@ export function InviteSheet({ open, onOpenChange }: Props) {
       setRole("participant");
       await loadInvites();
     } catch (err) {
-      const message =
+      const raw =
         err instanceof Error
           ? err.message
           : (err as { message?: string })?.message ?? "Could not create invite";
-      toast.error(message);
+      toast.error(friendlyInviteError(raw, email));
     } finally {
       setSubmitting(false);
     }
